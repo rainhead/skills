@@ -217,14 +217,29 @@ loop:
 | `public_positional_accuracy` | The obscured value (~26,500 m for obscured records); equals `positional_accuracy` when open |
 | `viewer_trusted_by_observer` | **Personal** trust only — false does NOT mean you lack coordinate access (see below) |
 
-Private coordinates require auth AND one of three trust cases:
-- **Self**: you are the observer → `private_geojson` present, `viewer_trusted_by_observer: false`.
-- **Personal trust**: the observer trusts your account directly → `private_geojson` present, `viewer_trusted_by_observer: true`. This is the *only* case where the flag is true.
-- **Project trust**: you are a curator/admin of a project named in the query (`project_id=...`) and the observer opted in to trusting that project's curators → `private_geojson` present, `viewer_trusted_by_observer: false`.
+Private coordinates require auth AND one of four cases (server source:
+`lib/models/observation.js` `removeUnviewableGeo`):
+- **Self**: you are the observer.
+- **Personal trust**: the observer trusts your account directly. The *only*
+  case where `viewer_trusted_by_observer` is true — the flag reflects
+  personal trust and nothing else.
+- **Traditional-project curator**: the observation was submitted to a
+  traditional project you curate and that submission allows curator
+  coordinate access (a stored, per-observation preference). Works in **any**
+  query context — membership lives on the observation.
+- **Collection-project curator**: you curate a collection project the
+  observation falls in, the project enables user trust
+  (`prefers_user_trust`), its requirements have been stable for 7+ days, and
+  the observer opted in (`prefers_curator_coordinate_access_for`: `"any"`,
+  or `"taxon"` = taxon-obscured only). Collection membership is computed,
+  not stored: this case applies **only when your authenticated search names
+  exactly that one collection project** (`project_id=...`) — fetching the
+  same observation by id, without `project_id`, or naming two projects
+  withholds the private fields.
 
 Consequences:
-- **The reliable "do I have the true coordinates?" signal is the presence of `private_geojson` in the response, not `viewer_trusted_by_observer`** — the flag is false in two of the three trust cases, including your own observations.
-- Trust is **per-query-context**: the same observation can return different projections depending on which `project_id` the query names and who the requester is. There is no observation-level "trusted" fact.
+- **The reliable "do I have the true coordinates?" signal is the presence of `private_geojson` in the response, not `viewer_trusted_by_observer`** — the flag is false in three of the four cases, including your own observations.
+- For **collection projects only**, trust is per-query-context: the same observation returns different projections depending on which `project_id` the query names. Traditional-project curator access follows the observation everywhere.
 - Being authenticated is not enough: a non-curator's token querying a project gets exactly the anonymous projection for obscured records (except `positional_accuracy`, which everyone gets).
 - `obscured` stays `true` even when you receive the true coordinates — it describes the public representation, not your access.
 - Requested private fields you lack access to are **omitted from the response entirely**, not returned as null (`viewer_trusted_by_observer` itself is omitted on anonymous requests) — another reason presence-testing is the right pattern.
