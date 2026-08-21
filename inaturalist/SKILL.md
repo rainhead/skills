@@ -245,6 +245,7 @@ Consequences:
 - Being authenticated is not enough: a non-curator's token querying a project gets exactly the anonymous projection for obscured records (except `positional_accuracy`, which everyone gets).
 - `obscured` stays `true` even when you receive the true coordinates — it describes the public representation, not your access.
 - Requested private fields you lack access to are **omitted from the response entirely**, not returned as null (`viewer_trusted_by_observer` itself is omitted on anonymous requests) — another reason presence-testing is the right pattern.
+- `project_observations.preferences` serializes as `{}` even where curator coordinate access is granted — don't audit access by reading preferences; fetch with the curator token and test `private_geojson` presence.
 
 ---
 

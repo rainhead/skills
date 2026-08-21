@@ -1,5 +1,17 @@
 # Verification history
 
+## 2026-08-21 — traditional-project curator trust, verified live
+
+A manager's token querying two traditional projects it curates received
+`private_geojson` (true coordinates, real 3 m accuracy vs ~26,700 m public)
+on other observers' obscured observations, with
+`viewer_trusted_by_observer: false` — the project-trust flavor observed for
+real, matching the source reading below. Also observed:
+`project_observations.preferences` serializes as `{}` even where curator
+coordinate access is clearly granted — the preference is not auditable from
+this field; test access by fetching with the curator token and checking
+`private_geojson` presence.
+
 Process notes backing claims in [SKILL.md](SKILL.md): when a fact was
 verified, against what, and how. The skill states the facts; this file keeps
 the receipts.
