@@ -8,10 +8,10 @@ assumptions before they're exercised.
 
 ## Skills
 
-- **[inaturalist](inaturalist/SKILL.md)** — the iNaturalist API (v1/v2) and
-  pyinaturalist: field selection, observation field values, drift-immune
-  pagination, and geoprivacy/trusted-access semantics as actually observed
-  live, not as commonly assumed.
+- **[inaturalist](inaturalist/SKILL.md)** — the iNaturalist API (v1/v2):
+  field selection, observation field values, drift-immune pagination, and
+  geoprivacy/trusted-access semantics as actually observed live, not as
+  commonly assumed.
 
 ## Install
 

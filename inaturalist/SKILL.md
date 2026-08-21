@@ -1,6 +1,6 @@
 ---
 name: inaturalist
-description: Work with the iNaturalist API (v1/v2) and the pyinaturalist Python library. Use when querying observations, taxa, places, identifications, or users on iNaturalist; when handling geoprivacy/private coordinates; or when setting up authenticated API access.
+description: Work with the iNaturalist API (v1/v2). Use when querying observations, taxa, places, identifications, or users on iNaturalist; when handling geoprivacy/private coordinates; or when setting up authenticated API access.
 ---
 
 # iNaturalist API
@@ -13,8 +13,7 @@ Two active API versions:
 
 Interactive Swagger docs: https://api.inaturalist.org/v2/docs/
 
-Server source: https://github.com/inaturalist/iNaturalistAPI  
-Python client: https://github.com/pyinat/pyinaturalist
+Server source: https://github.com/inaturalist/iNaturalistAPI
 
 ---
 
@@ -34,19 +33,6 @@ v2 also supports both a user JWT and an app JWT simultaneously (comma-separated 
 - `userJwtRequired` — 401 if no user JWT
 - `appOrUserJwtRequired` / `appAndUserJwtRequired` — for write operations
 
-**pyinaturalist:**
-```python
-from pyinaturalist import iNatClient
-
-# Password flow
-client = iNatClient(creds={
-    'username': 'user', 'password': 'pwd',
-    'app_id': 'app_id', 'app_secret': 'app_secret',
-})
-# Or env vars: INATURALIST_USERNAME, INATURALIST_PASSWORD, INAT_APP_ID, INAT_APP_SECRET
-# Tokens auto-cached, auto-refreshed; 401s trigger refresh automatically
-```
-
 ---
 
 ## v2 Field Selection
@@ -65,33 +51,7 @@ client = iNatClient(creds={
 
 Nested dicts: `true` means include the field; omitting means exclude. Parent fields with `{all: true}` include all their children.
 
-**POST for complex field selection:** When the `fields` dict is specified or you're fetching >30 IDs, use POST with `X-HTTP-Method-Override: GET` header and the full params in the request body. pyinaturalist does this automatically.
-
-**`except_fields`** (pyinaturalist only): request everything except the listed top-level fields. Uses `ALL_OBS_FIELDS` dict defined in `pyinaturalist/v2/observations.py`.
-
-```python
-from pyinaturalist.v2.observations import get_observations
-
-# Minimal (just uuid — nearly useless)
-get_observations(taxon_name='Monarch')
-
-# Named fields
-get_observations(taxon_name='Monarch', fields='species_guess,observed_on,user.login')
-
-# Dict selection
-get_observations(taxon_name='Monarch', fields={
-    'species_guess': True,
-    'taxon': {'name': True, 'rank': True},
-    'user': {'login': True},
-    'ofvs': True,  # observation field values
-})
-
-# Everything
-get_observations(taxon_name='Monarch', fields='all')
-
-# Everything except identifications (large and slow)
-get_observations(taxon_name='Monarch', except_fields=['identifications'])
-```
+**POST for complex field selection:** When the `fields` dict is specified or you're fetching >30 IDs, use POST with `X-HTTP-Method-Override: GET` header and the full params in the request body.
 
 **Available top-level observation fields:**
 
@@ -111,7 +71,7 @@ get_observations(taxon_name='Monarch', except_fields=['identifications'])
 | Status | `mappable`, `captive`, `out_of_range`, `spam` |
 | Meta | `tags`, `outlinks`, `uri`, `license_code`, `preferences`, `application`, `site_id` |
 
-Note: `location` in v2 is part of `geojson` (GeoJSON point), not a separate field. pyinaturalist extracts lat/lng from it into `observation.location`.
+Note: `location` in v2 is part of `geojson` (GeoJSON point), not a separate field.
 
 ---
 
@@ -121,19 +81,12 @@ iNaturalist lets observers attach custom key-value data to observations via "obs
 
 ### Filtering by OFVs (search parameters)
 
-URL / v1 API syntax:
+Query syntax:
 ```
 field:Habitat%20(s%20Afr)            # has field with any value
 field:Habitat%20(s%20Afr)=Nama%20Karoo  # has field with specific value
 without_field=Habitat                # lacks this field
 ```
-
-pyinaturalist keyword syntax:
-```python
-get_observations(observation_fields=['Species count'])          # field present, any value
-get_observations(observation_fields={'Species count': 2})       # field = specific value
-```
-These are converted to `field:Name=value` query params internally.
 
 ### OFVs in responses
 
@@ -231,27 +184,20 @@ Two ways to page. **Prefer id-keyset for anything that must be a consistent snap
 - **Rate limits:** Hard cap 100 req/min; keep to ≤60 req/min in practice
 - **Media download limits:** 5 GB/hour, 24 GB/day — exceeding causes permanent IP block
 
-pyinaturalist enforces rate limits automatically (1 req/sec, 60/min, 10,000/day via SQLite).
-
 Two subtleties that make a keyset sweep *provably complete*:
 - **Stop on a short page, not just an empty one.** iNat returns exactly `per_page` rows for every page but the last, so a page with `< per_page` rows (including 0) is terminal — it can't be followed by more. Breaking only on an empty page (`if not results`) still works but costs one extra request whenever the total is an exact multiple of `per_page`.
 - **Advance the cursor by the max *raw* id — before any client-side filtering.** If you drop rows locally (e.g. out-of-scope records) and then compute the cursor from the *kept* rows, a trailing dropped row never advances the cursor and the sweep stalls or re-fetches. Use the last raw result's id.
 
-```python
-# Iterate all pages via pyinaturalist
-for obs in client.observations.search(taxon_name='Owl', page='all'):
-    ...
-
-# Manual id-keyset sweep — the correct pattern for a consistent snapshot
+```
+# id-keyset sweep — the correct pattern for a consistent snapshot
 last_id = 0
-while True:
-    response = get_observations(taxon_id=47792, order_by='id', order='asc',
-                                id_above=last_id, per_page=200, fields={...})
-    results = response['results']            # raw page, before any local filtering
-    # ... accumulate / filter results here ...
-    if len(results) < 200:                   # short (or empty) page → terminal, done
-        break
-    last_id = results[-1]['id']              # max RAW id (results are asc by id)
+loop:
+    GET /v2/observations?taxon_id=47792&order_by=id&order=asc
+        &id_above={last_id}&per_page=200&fields=...
+    results = the page's results array   # raw, before any local filtering
+    ... accumulate / filter locally ...
+    if len(results) < 200: break         # short (or empty) page → terminal
+    last_id = results[-1].id             # max RAW id (results are asc by id)
 ```
 
 ---
@@ -280,8 +226,6 @@ Consequences:
 - Trust is **per-query-context**: the same observation can return different projections depending on which `project_id` the query names and who the requester is. There is no observation-level "trusted" fact.
 - Being authenticated is not enough: a non-curator's token querying a project gets exactly the anonymous projection for obscured records (except `positional_accuracy`, which everyone gets).
 
-pyinaturalist puts extracted lat/lng in `obs.location`; prefer `obs.private_location or obs.location` when auth'd.
-
 ---
 
 ## v2-Only Endpoints
@@ -306,5 +250,4 @@ v2 observations use **UUIDs** as primary identifier; integer IDs are still prese
 6. **`/observations/observers` bug** — stops at ~500 records with `order_by=species_count`; returns duplicates and 500 errors beyond that.
 7. **Photo license case** — must be lowercase (`cc-by`, not `CC-BY`).
 8. **`per_page` default is 30** — always set higher (up to 200).
-9. **POST auto-upgrade in pyinaturalist** — when using a `fields` dict or >30 IDs, requests automatically switch to POST. Transparent to the caller.
-10. **`viewer_trusted_by_observer: false` does not mean untrusted** — project-curator trust delivers `private_geojson` with that flag false. Test for the presence of `private_geojson` instead. See Geoprivacy & Private Fields.
+9. **`viewer_trusted_by_observer: false` does not mean untrusted** — project-curator trust delivers `private_geojson` with that flag false. Test for the presence of `private_geojson` instead. See Geoprivacy & Private Fields.
