@@ -6,8 +6,10 @@ the receipts.
 
 ## 2026-08-21 — project-trust semantics, verified against source
 
-Read from `iNaturalistAPI` (`lib/models/observation.js` `removeUnviewableGeo`;
-`lib/controllers/v1/observations_controller.js`; `lib/models/project_user.js`):
+Read from `iNaturalistAPI` at `97c7dac` (2026-04-09):
+[`Observation#removeUnviewableGeo`](https://github.com/inaturalist/iNaturalistAPI/blob/97c7dac7cddab6d5ac84f336bf75d8e2fb866f4d/lib/models/observation.js#L81-L148);
+[collection-project grafting in `observations_controller.js`](https://github.com/inaturalist/iNaturalistAPI/blob/97c7dac7cddab6d5ac84f336bf75d8e2fb866f4d/lib/controllers/v1/observations_controller.js#L159-L187);
+[`ProjectUser.CURATOR_COORDINATE_ACCESS_WAIT_DAYS`](https://github.com/inaturalist/iNaturalistAPI/blob/97c7dac7cddab6d5ac84f336bf75d8e2fb866f4d/lib/models/project_user.js#L57):
 
 - `viewer_trusted_by_observer` is computed solely from the session's
   personal-trust grants (`trustingUserIDs`) — definitively independent of
@@ -71,7 +73,7 @@ and the per-query-context claim is narrowed to collection projects.
 
 ## Undated — `d1`/`d2` date-range semantics, verified against source
 
-Read from `iNaturalistAPI/lib/util.js` (`dateRangeFilter`, called with
+Read from [`dateRangeFilter`](https://github.com/inaturalist/iNaturalistAPI/blob/97c7dac7cddab6d5ac84f336bf75d8e2fb866f4d/lib/util.js#L190) (called with
 `time_observed_at` + `observed_on_details.date`): date-only values match the
 observation's local calendar date inclusively; datetime values match the
 `time_observed_at` instant, falling back to local date when absent.

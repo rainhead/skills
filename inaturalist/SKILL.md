@@ -135,7 +135,7 @@ Request the `ofvs` field to get OFV data on returned observations. Each OFV obje
 | `d1` / `d2` | Observed date range. Accepts date-only (`2020-10-25`) **or** datetime (`2020-10-25T10:00-05:00`) — the form you pass changes the semantics; see below. |
 | `month`, `day`, `year`, `hour` | Specific time parts (month 1-12, hour 0-23) |
 
-**`d1`/`d2` semantics depend on whether you include a time** (source: `iNaturalistAPI/lib/util.js` `dateRangeFilter`):
+**`d1`/`d2` semantics depend on whether you include a time** (source: [`dateRangeFilter`](https://github.com/inaturalist/iNaturalistAPI/blob/97c7dac7cddab6d5ac84f336bf75d8e2fb866f4d/lib/util.js#L190)):
 - **Date-only** (`YYYY-MM-DD`) → matches on `observed_on_details.date`, the observation's **local calendar date**, **inclusive on both ends**. No timezone conversion — an observation counts on the date the observer recorded, regardless of your (or the server's) timezone. `d1=d2=2024-06-15` returns exactly that day. This is what you almost always want; it's immune to UTC-vs-local skew.
 - **With a time** (`...THH:mm:ssZ`) → matches on the `time_observed_at` **instant** for observations that have a time, falling back to the local date for those that don't. Use only when you genuinely need sub-day precision.
 
@@ -218,7 +218,7 @@ loop:
 | `viewer_trusted_by_observer` | **Personal** trust only — false does NOT mean you lack coordinate access (see below) |
 
 Private coordinates require auth AND one of four cases (server source:
-`lib/models/observation.js` `removeUnviewableGeo`):
+[`Observation#removeUnviewableGeo`](https://github.com/inaturalist/iNaturalistAPI/blob/97c7dac7cddab6d5ac84f336bf75d8e2fb866f4d/lib/models/observation.js#L81-L148)):
 - **Self**: you are the observer.
 - **Personal trust**: the observer trusts your account directly. The *only*
   case where `viewer_trusted_by_observer` is true — the flag reflects
@@ -236,8 +236,8 @@ Private coordinates require auth AND one of four cases (server source:
   exactly that one collection project** (`project_id=...`) — fetching the
   same observation by id, without `project_id`, or naming two projects
   withholds the private fields
-  (`lib/controllers/v1/observations_controller.js`;
-  `CURATOR_COORDINATE_ACCESS_WAIT_DAYS` in `lib/models/project_user.js`).
+  ([the grafting](https://github.com/inaturalist/iNaturalistAPI/blob/97c7dac7cddab6d5ac84f336bf75d8e2fb866f4d/lib/controllers/v1/observations_controller.js#L159-L187);
+  [`CURATOR_COORDINATE_ACCESS_WAIT_DAYS`](https://github.com/inaturalist/iNaturalistAPI/blob/97c7dac7cddab6d5ac84f336bf75d8e2fb866f4d/lib/models/project_user.js#L57)).
 
 Consequences:
 - **The reliable "do I have the true coordinates?" signal is the presence of `private_geojson` in the response, not `viewer_trusted_by_observer`** — the flag is false in three of the four cases, including your own observations.
@@ -279,7 +279,7 @@ v2 observations use **UUIDs** as primary identifier; integer IDs are still prese
 Authoritative places to verify or go deeper:
 
 - **API reference (Swagger)**: [v2](https://api.inaturalist.org/v2/docs/) · [v1](https://api.inaturalist.org/v1/docs/)
-- **API server source** — the response filtering and query building described here: https://github.com/inaturalist/iNaturalistAPI (file paths cited inline are relative to this repo)
+- **API server source** — the response filtering and query building described here: https://github.com/inaturalist/iNaturalistAPI. Inline code links are permalinks pinned to the revision the claim was verified against (`97c7dac`, 2026-04); to find a symbol's current form, use GitHub symbol search, e.g. [`symbol:removeUnviewableGeo`](https://github.com/search?q=repo%3Ainaturalist%2FiNaturalistAPI+symbol%3AremoveUnviewableGeo&type=code) (requires sign-in)
 - **Rails app source** — obscuring, geoprivacy, projects, and everything upstream of the API: https://github.com/inaturalist/inaturalist
 - **Search URL wikis** — community-maintained canonical reference for query parameters: [part 1](https://forum.inaturalist.org/t/how-to-use-inaturalists-search-urls-wiki-part-1-of-2/63) · [part 2](https://forum.inaturalist.org/t/how-to-use-inaturalists-search-urls-wiki-part-2-of-2/18792)
 - **Geoprivacy explained** (user-facing semantics of obscuring): https://help.inaturalist.org/en/support/solutions/articles/151000169938
