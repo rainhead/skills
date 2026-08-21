@@ -217,14 +217,17 @@ loop:
 | `public_positional_accuracy` | The obscured value (~26,500 m for obscured records); equals `positional_accuracy` when open |
 | `viewer_trusted_by_observer` | **Personal** trust only — false does NOT mean you lack coordinate access (see below) |
 
-Private coordinates require auth AND trust, which comes in two flavors:
-- **Personal trust**: the observer trusts your account directly (or you are the observer) → `private_geojson` present, `viewer_trusted_by_observer: true`.
-- **Project trust**: you are a curator/admin of a project named in the query (`project_id=...`) and the observer opted in to trusting that project's curators → `private_geojson` present, but `viewer_trusted_by_observer: false`.
+Private coordinates require auth AND one of three trust cases:
+- **Self**: you are the observer → `private_geojson` present, `viewer_trusted_by_observer: false`.
+- **Personal trust**: the observer trusts your account directly → `private_geojson` present, `viewer_trusted_by_observer: true`. This is the *only* case where the flag is true.
+- **Project trust**: you are a curator/admin of a project named in the query (`project_id=...`) and the observer opted in to trusting that project's curators → `private_geojson` present, `viewer_trusted_by_observer: false`.
 
 Consequences:
-- **The reliable "do I have the true coordinates?" signal is the presence of `private_geojson` in the response, not `viewer_trusted_by_observer`.**
+- **The reliable "do I have the true coordinates?" signal is the presence of `private_geojson` in the response, not `viewer_trusted_by_observer`** — the flag is false in two of the three trust cases, including your own observations.
 - Trust is **per-query-context**: the same observation can return different projections depending on which `project_id` the query names and who the requester is. There is no observation-level "trusted" fact.
 - Being authenticated is not enough: a non-curator's token querying a project gets exactly the anonymous projection for obscured records (except `positional_accuracy`, which everyone gets).
+- `obscured` stays `true` even when you receive the true coordinates — it describes the public representation, not your access.
+- Requested private fields you lack access to are **omitted from the response entirely**, not returned as null (`viewer_trusted_by_observer` itself is omitted on anonymous requests) — another reason presence-testing is the right pattern.
 
 ---
 

@@ -4,6 +4,21 @@ Process notes backing claims in [SKILL.md](SKILL.md): when a fact was
 verified, against what, and how. The skill states the facts; this file keeps
 the receipts.
 
+## 2026-08-21 — self-trust case, verified live
+
+Fetched an observer's own obscured observations with their JWT, then the
+same observation anonymously:
+
+- Own observations deliver `private_geojson` and `private_place_guess` with
+  `viewer_trusted_by_observer: false` — the flag is true only for a direct
+  personal-trust grant from another observer.
+- `obscured` remained `true` alongside the delivered true coordinates.
+- Anonymously, the requested-but-inaccessible fields (`private_geojson`,
+  `private_place_guess`, `viewer_trusted_by_observer`) were omitted from
+  the response entirely rather than returned as null; the real
+  `positional_accuracy` (14 m vs `public_positional_accuracy` 26,807 m)
+  was again delivered without auth.
+
 ## 2026-08-21 — geoprivacy & trusted access, verified live
 
 Observed during authenticated and anonymous v2 sweeps of a curated project
