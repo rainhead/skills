@@ -25,10 +25,12 @@ ln -s "$PWD/skills/inaturalist" ~/.claude/skills/inaturalist
 
 ## Maintenance
 
-Each skill states facts plainly; the dated verification receipts — what was
-checked, when, against what — live in the skill's `CHANGES.md`. Corrections
-welcome — these documents exist to be less wrong than an agent's priors.
-Maintained with the help of AI agents. 🤖
+Each skill states facts plainly and cites authoritative sources — inline for
+load-bearing claims, and in a closing Sources section for verification and
+deeper reading. Dated verification receipts — what was checked, when,
+against what — live in the skill's `CHANGES.md`. Corrections welcome — these
+documents exist to be less wrong than an agent's priors. Maintained with the
+help of AI agents. 🤖
 
 ## License
 

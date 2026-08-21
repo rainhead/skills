@@ -135,7 +135,7 @@ Request the `ofvs` field to get OFV data on returned observations. Each OFV obje
 | `d1` / `d2` | Observed date range. Accepts date-only (`2020-10-25`) **or** datetime (`2020-10-25T10:00-05:00`) — the form you pass changes the semantics; see below. |
 | `month`, `day`, `year`, `hour` | Specific time parts (month 1-12, hour 0-23) |
 
-**`d1`/`d2` semantics depend on whether you include a time**:
+**`d1`/`d2` semantics depend on whether you include a time** (source: `iNaturalistAPI/lib/util.js` `dateRangeFilter`):
 - **Date-only** (`YYYY-MM-DD`) → matches on `observed_on_details.date`, the observation's **local calendar date**, **inclusive on both ends**. No timezone conversion — an observation counts on the date the observer recorded, regardless of your (or the server's) timezone. `d1=d2=2024-06-15` returns exactly that day. This is what you almost always want; it's immune to UTC-vs-local skew.
 - **With a time** (`...THH:mm:ssZ`) → matches on the `time_observed_at` **instant** for observations that have a time, falling back to the local date for those that don't. Use only when you genuinely need sub-day precision.
 
@@ -235,7 +235,9 @@ Private coordinates require auth AND one of four cases (server source:
   not stored: this case applies **only when your authenticated search names
   exactly that one collection project** (`project_id=...`) — fetching the
   same observation by id, without `project_id`, or naming two projects
-  withholds the private fields.
+  withholds the private fields
+  (`lib/controllers/v1/observations_controller.js`;
+  `CURATOR_COORDINATE_ACCESS_WAIT_DAYS` in `lib/models/project_user.js`).
 
 Consequences:
 - **The reliable "do I have the true coordinates?" signal is the presence of `private_geojson` in the response, not `viewer_trusted_by_observer`** — the flag is false in three of the four cases, including your own observations.
@@ -269,3 +271,16 @@ v2 observations use **UUIDs** as primary identifier; integer IDs are still prese
 7. **Photo license case** — must be lowercase (`cc-by`, not `CC-BY`).
 8. **`per_page` default is 30** — always set higher (up to 200).
 9. **`viewer_trusted_by_observer: false` does not mean untrusted** — project-curator trust delivers `private_geojson` with that flag false. Test for the presence of `private_geojson` instead. See Geoprivacy & Private Fields.
+
+---
+
+## Sources
+
+Authoritative places to verify or go deeper:
+
+- **API reference (Swagger)**: [v2](https://api.inaturalist.org/v2/docs/) · [v1](https://api.inaturalist.org/v1/docs/)
+- **API server source** — the response filtering and query building described here: https://github.com/inaturalist/iNaturalistAPI (file paths cited inline are relative to this repo)
+- **Rails app source** — obscuring, geoprivacy, projects, and everything upstream of the API: https://github.com/inaturalist/inaturalist
+- **Search URL wikis** — community-maintained canonical reference for query parameters: [part 1](https://forum.inaturalist.org/t/how-to-use-inaturalists-search-urls-wiki-part-1-of-2/63) · [part 2](https://forum.inaturalist.org/t/how-to-use-inaturalists-search-urls-wiki-part-2-of-2/18792)
+- **Geoprivacy explained** (user-facing semantics of obscuring): https://help.inaturalist.org/en/support/solutions/articles/151000169938
+- **Help center & forum** — staff answers on API behavior: https://help.inaturalist.org/ · https://forum.inaturalist.org/
