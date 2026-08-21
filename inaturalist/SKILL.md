@@ -182,7 +182,7 @@ Request the `ofvs` field to get OFV data on returned observations. Each OFV obje
 | `d1` / `d2` | Observed date range. Accepts date-only (`2020-10-25`) **or** datetime (`2020-10-25T10:00-05:00`) — the form you pass changes the semantics; see below. |
 | `month`, `day`, `year`, `hour` | Specific time parts (month 1-12, hour 0-23) |
 
-**`d1`/`d2` semantics depend on whether you include a time** (verified against `iNaturalistAPI/lib/util.js` `dateRangeFilter`, called with `time_observed_at` + `observed_on_details.date`):
+**`d1`/`d2` semantics depend on whether you include a time**:
 - **Date-only** (`YYYY-MM-DD`) → matches on `observed_on_details.date`, the observation's **local calendar date**, **inclusive on both ends**. No timezone conversion — an observation counts on the date the observer recorded, regardless of your (or the server's) timezone. `d1=d2=2024-06-15` returns exactly that day. This is what you almost always want; it's immune to UTC-vs-local skew.
 - **With a time** (`...THH:mm:ssZ`) → matches on the `time_observed_at` **instant** for observations that have a time, falling back to the local date for those that don't. Use only when you genuinely need sub-day precision.
 
@@ -267,7 +267,7 @@ while True:
 | `geoprivacy` | `open` / `obscured` / `private` (set by observer). May arrive as `null` **or** the explicit string `"open"` — treat them as equivalent |
 | `taxon_geoprivacy` | Set automatically by iNat based on conservation status. Same `null`-vs-`"open"` caveat (explicit `"open"` observed in the wild) |
 | `obscured` | Bool — true means shown as broad area, not exact point |
-| `positional_accuracy` | Real GPS accuracy of the true location. **Delivered to everyone — even anonymous requesters on obscured observations** (verified live 2026-08: anonymous and untrusted-authenticated reads both got the real 6–15 m values on obscured records). Only the coordinates themselves are protected |
+| `positional_accuracy` | Real GPS accuracy of the true location. **Delivered to everyone — even anonymous requesters on obscured observations.** Only the coordinates themselves are protected |
 | `public_positional_accuracy` | The obscured value (~26,500 m for obscured records); equals `positional_accuracy` when open |
 | `viewer_trusted_by_observer` | **Personal** trust only — false does NOT mean you lack coordinate access (see below) |
 
@@ -275,7 +275,7 @@ Private coordinates require auth AND trust, which comes in two flavors:
 - **Personal trust**: the observer trusts your account directly (or you are the observer) → `private_geojson` present, `viewer_trusted_by_observer: true`.
 - **Project trust**: you are a curator/admin of a project named in the query (`project_id=...`) and the observer opted in to trusting that project's curators → `private_geojson` present, but `viewer_trusted_by_observer: false`.
 
-Consequences (verified live 2026-08):
+Consequences:
 - **The reliable "do I have the true coordinates?" signal is the presence of `private_geojson` in the response, not `viewer_trusted_by_observer`.**
 - Trust is **per-query-context**: the same observation can return different projections depending on which `project_id` the query names and who the requester is. There is no observation-level "trusted" fact.
 - Being authenticated is not enough: a non-curator's token querying a project gets exactly the anonymous projection for obscured records (except `positional_accuracy`, which everyone gets).
