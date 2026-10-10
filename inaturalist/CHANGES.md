@@ -1,5 +1,22 @@
 # Verification history
 
+## 2026-10-10 — identifications move `updated_at`, comments don't; id lists; licensing
+
+Prompted by adding identifications and comments to a mirror kept current by `updated_since` sweeps (salishsea-io #678).
+
+| Probe | Result |
+|---|---|
+| 100 orca observations, `order_by=updated_at`: latest identification vs observation `updated_at` | 0 of 100 later |
+| 1,000 Washington observations dated 2026-06..07, id-keyset: latest identification by someone other than the observer | 0 of 575 later than `updated_at` (+5 s) |
+| same 1,000: latest comment | 3 of 10 later than `updated_at` (e.g. 367406903, 367523255, 367524140) |
+| 100 recent orca observations: latest comment | 1 of 5 later (406576622: comment 2026-10-07T17:44:59Z, `updated_at` 2026-10-07T16:32:22Z) |
+| 600 Washington observations uploaded today | 12 had the observer's own identification 1–2 s after `updated_at`: created by the upload |
+| `/v2/observations?id=<200 ids>&id_above=0&order_by=id` | `total_results: 200`, all returned |
+| 1,600 Washington Research Grade observations, 2026-05..07: latest identification a third-or-later agreement by someone else (could not change community taxon or grade) | `updated_at` moved in 270 of 270 |
+| identification and comment `fields` on observation 397638757 and live windows | field shapes as written in SKILL.md; `updated_at` on a comment returns nothing |
+
+Rails source read at `b1274a0` (and the same in a local checkout at `f12c7b4`, 2025-03): `Comment#update_parent_counter_cache` (`update_all` of `comments_count` and `updated_at`) and `Comment#index_parent`; `Identification`'s `after_commit :update_categories, :update_observation, :update_obs_stats, …`, run in reverse under Rails 6.1 / `load_defaults 5.0`; `Observation#update_stats` setting `identifications_count` before `update_observation`'s `observation.update(attrs)` saves it. Peter asked whether identifications move `updated_at` in themselves or only through the community taxon; the 270-observation probe was designed to tell those apart. The stale-in-memory explanation for comments is an inference from that source, not confirmed against the index.
+
 ## 2026-08-28 — retired taxa are visible on `/taxa/{ids}` but not `/taxa?id=`, verified live
 
 Prompted by a real mirror going stale: 9 of 512 cached taxa had been retired
