@@ -111,6 +111,7 @@ Request the `ofvs` field to get OFV data on returned observations. Each OFV obje
 | Param | Notes |
 |-------|-------|
 | `taxon_id` / `taxon_ids` | Numeric ID(s); comma-separated = OR |
+| — | **Retired taxa:** on `/taxa`, the `id=` param filters them out while the `/taxa/{ids}` path form returns them with `is_active: false` and `current_synonymous_taxon_ids`. See Known Gotchas #10. |
 | `taxon_name` | Scientific or common name. **Gotcha:** misspelling returns all taxa silently. Common names matching multiple taxa return only the first match. Use IDs for precision. |
 | `without_taxon_id` | Exclude taxon(s) |
 | `ident_taxon_id` | Has an active ID for taxon (not necessarily community consensus) |
@@ -272,6 +273,8 @@ v2 observations use **UUIDs** as primary identifier; integer IDs are still prese
 7. **Photo license case** — must be lowercase (`cc-by`, not `CC-BY`).
 8. **`per_page` default is 30** — always set higher (up to 200).
 9. **`viewer_trusted_by_observer: false` does not mean untrusted** — project-curator trust delivers `private_geojson` with that flag false. Test for the presence of `private_geojson` instead. See Geoprivacy & Private Fields.
+10. **`/taxa?id=` hides retired taxa; `/taxa/{ids}` does not** — same API version, different route, different result set. The query-param form filters to active taxa and reports `total_results: 0` for a retired one, with nothing to say it ever existed; the path form returns it with `is_active: false` and `current_synonymous_taxon_ids` naming its replacement. This bites hardest in a closure resolver that treats "requested but not returned" as a failure: a taxon retired since you last saw it silently becomes an unresolvable id. Use the path form whenever an id might be retired, and request `is_active` and `current_synonymous_taxon_ids` explicitly (v2 returns neither by default). Note also that `GET /observations?taxon_id=<retired>` returns 0 — iNaturalist reassigns observations to the successor, so the retired id keeps nothing.
+11. **One OAuth callback URL per app** — an iNat OAuth app registration holds exactly one redirect URI (no multi-URI list, despite Doorkeeper supporting it elsewhere). Every flow sharing the app (web sign-in, CLI logins) must share that one callback; plan ports/paths accordingly.
 
 ---
 

@@ -1,5 +1,33 @@
 # Verification history
 
+## 2026-08-28 — retired taxa are visible on `/taxa/{ids}` but not `/taxa?id=`, verified live
+
+Prompted by a real mirror going stale: 9 of 512 cached taxa had been retired
+upstream and nothing noticed, because the code refreshing them queried
+`?id=`.
+
+Probed taxon `1368491` (*Sagmatias obliquidens*, retired in favour of
+`1664971` *Aethalodelphis obliquidens*) alongside a live control, `41777`
+(*Lontra canadensis*):
+
+| Request | Result |
+|---|---|
+| `v2 /taxa?id=1368491&fields=(id:!t,name:!t,is_active:!t)` | `total_results: 0`, empty results |
+| `v2 /taxa/1368491?fields=(...,is_active:!t,current_synonymous_taxon_ids:!t)` | returned, `is_active: false`, `current_synonymous_taxon_ids: [1664971]` |
+| `v2 /taxa/1368491,41777?fields=(...)` | both returned; comma-separated ids work on the path form |
+| `v1 /taxa/1368491,41777` | both returned, `is_active` and `current_synonymous_taxon_ids` present without field selection |
+| `v1 /observations?taxon_id=1368491&per_page=0` | `total_results: 0` — observations are reassigned to the successor |
+
+So the difference is **route, not API version**: `?id=` filters to active taxa
+on both v1 and v2, while the path form does not. An earlier reading of this
+same evidence concluded "v2 cannot see inactive taxa and v1 can", which is
+wrong — v1 was simply being called in its path form. Recorded because the
+wrong conclusion is the easy one to reach from a two-request comparison.
+
+Consequence worth carrying: a closure resolver that requests referenced taxa
+by `?id=` and treats "requested but not returned" as a hard failure will abort
+on the first taxon retired since it last ran.
+
 ## 2026-08-21 — traditional-project curator trust, verified live
 
 A manager's token querying two traditional projects it curates received
