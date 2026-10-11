@@ -1,5 +1,20 @@
 # Verification history
 
+## 2026-10-10 — no bulk user route, but observers take a user list; ORCID is a connected account
+
+Prompted by counting how many of a bee atlas's volunteers have an ORCID on iNaturalist (beeline, 440 accounts).
+
+| Probe | Result |
+|---|---|
+| `/v2/users/728554,1?fields=id,login,orcid` | 404, `User does not exist` |
+| `/v1/users/728554,1` | 404, `User does not exist` |
+| `/v1/users/rainhead` | user record with `orcid: "https://orcid.org/0009-0004-7380-0786"` |
+| `/v1/observations/observers?user_id=rainhead&per_page=1` | the same full user record, `orcid` included |
+| `/v1/observations/observers?user_id=<150 numeric ids>&per_page=200&quality_grade=any&verifiable=any`, three times | 437 of 440 users returned; the 3 absent have no observations or no account |
+| GBIF occurrence search, `recordedBy=<the same user's name>`, facet `recordedByID` | the ORCID URI on every record in iNaturalist's Research-grade dataset, and on none of that person's specimen records in other datasets |
+
+Rails source read at `b1274a0`: `User#orcid` returns the `provider_uid` of the user's `orcid` provider authorization; `ProviderAuthorization::PROVIDERS` lists `orcid`; `config/initializers/omniauth.rb` registers the `omniauth-orcid` provider; `app/webpack/users/edit/components/applications.jsx` renders the Connected Accounts section with a connect option for each provider in `AUTH_PROVIDER_URLS`; `lib/darwin_core/occurrence.rb` writes `https://orcid.org/<provider_uid>` as `recordedByID`. Of the 437 atlas accounts, 2 had connected an ORCID.
+
 ## 2026-10-10 — identifications move `updated_at`, comments don't; id lists; licensing
 
 Prompted by adding identifications and comments to a mirror kept current by `updated_since` sweeps (salishsea-io #678).
