@@ -1,5 +1,19 @@
 # Verification history
 
+## 2026-10-15 — a flagged photo's URL becomes a placeholder, with `hidden` false
+
+Prompted by a broken image on SalishSea.io's map, and its production smoke test failing on the console error (salishsea-io #691, #693).
+
+| Probe | Result |
+|---|---|
+| `/v1/observations/408597178` | photo 751114878: `url` `https://www.inaturalist.org/assets/copyright-infringement-square.png`, `hidden: false`, `flags: [{flag: "copyright infringement", resolved: false, created_at: 2026-10-15T23:42:13Z}]`; observation `updated_at` 2026-10-15T23:42:15Z |
+| `/v1/observations/408608378` | the same, flag 2026-10-16T02:25:58Z, `updated_at` 02:25:59Z |
+| `/v2/observations?id=408597178&fields=observation_photos.photo.url,observation_photos.photo.hidden,observation_photos.photo.flags.flag,observation_photos.photo.flags.resolved` | the same placeholder, `hidden: false`, the flag with `resolved: false` |
+| the placeholder as an `<img>` on https://salishsea.io in Chromium | refused, `net::ERR_BLOCKED_BY_RESPONSE.NotSameOrigin` |
+| `curl -I` on the placeholder | 403 with `cf-mitigated: challenge` and `cross-origin-resource-policy: same-origin`, so scripts get a Cloudflare challenge instead; a photo on `inaturalist-open-data.s3.amazonaws.com` answers 200 without that header |
+
+Rails source read at `2c2bec7`: `Photo#sized_url` returns `copyright-infringement-<size>.png` for an unresolved `Flag::COPYRIGHT_INFRINGEMENT`, then `artificially-generated-content-<size>.png` for an unresolved `Flag::ARTIFICIALLY_GENERATED_CONTENT`, then `media-hidden-<size>.png` if the photo is hidden, unless called with `bypass_flags`. Not verified: whether resolving a flag moves the observation's `updated_at`.
+
 ## 2026-10-10 — no bulk user route, but observers take a user list; ORCID is a connected account
 
 Prompted by counting how many of a bee atlas's volunteers have an ORCID on iNaturalist (beeline, 440 accounts).
