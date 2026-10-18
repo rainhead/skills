@@ -5,55 +5,67 @@ description: Work with the iNaturalist API (v1/v2). Use when querying observatio
 
 # iNaturalist API
 
-## Overview
+Use **v2** (`https://api.inaturalist.org/v2`). You choose the fields you get back, observations are identified by UUID, and responses are smaller. **v1** (`https://api.inaturalist.org/v1`) always returns every field and uses integer ids. It is still the right choice for a few routes, such as observation field values.
 
-Two active API versions:
-- **v1** (`https://api.inaturalist.org/v1`): Older, fixed response schemas (returns everything always), integer IDs
-- **v2** (`https://api.inaturalist.org/v2`): Recommended. Customizable field selection, UUID-based for observations, faster (less data transferred)
+Interactive docs: [v2](https://api.inaturalist.org/v2/docs/) · [v1](https://api.inaturalist.org/v1/docs/). Server source: https://github.com/inaturalist/iNaturalistAPI.
 
-Interactive Swagger docs: https://api.inaturalist.org/v2/docs/
+## Where to look
 
-Server source: https://github.com/inaturalist/iNaturalistAPI
+| You are… | Read |
+|----------|------|
+| Writing any query | This file |
+| Wanting exact coordinates, or missing location fields | [references/geoprivacy.md](references/geoprivacy.md) |
+| Exporting or syncing a whole window of observations | [references/pagination.md](references/pagination.md) |
+| Requesting identifications or comments, or syncing with `updated_since` | [references/identifications-and-comments.md](references/identifications-and-comments.md) |
+| Hitting something odd with taxa, users, photos or OAuth | [Known gotchas](#known-gotchas), then [references/gotchas.md](references/gotchas.md) |
+| Checking when and how a claim was verified | [CHANGES.md](CHANGES.md) |
 
----
+## Quick start
+
+```
+GET https://api.inaturalist.org/v2/observations
+    ?taxon_id=47792
+    &d1=2024-06-01&d2=2024-06-30
+    &quality_grade=research
+    &per_page=200
+    &fields=uuid,observed_on,geojson,taxon.name,user.login
+```
+
+Without `fields` you get only `uuid`. Without `per_page` you get 30 rows.
 
 ## Authentication
 
-Many read endpoints work unauthenticated (public data only). Auth required for:
-- Private/obscured coordinates
-- Write operations (create/update/delete observations, identifications, comments)
-- Personal user data
+Many read endpoints work without a token and return public data only. You need one for:
+- private or obscured coordinates (see [geoprivacy](references/geoprivacy.md));
+- writes: creating, updating or deleting observations, identifications and comments;
+- personal user data.
 
-**Getting a token:** JWT from https://www.inaturalist.org/users/api_token (expires every 24 hours)
+**Getting a token:** a JWT from https://www.inaturalist.org/users/api_token. It expires every 24 hours.
 
-**Header:** `Authorization: Bearer {JWT}` or just `Authorization: {JWT}`
+**Header:** `Authorization: Bearer {JWT}`, or just `Authorization: {JWT}`.
 
-v2 also supports both a user JWT and an app JWT simultaneously (comma-separated or separate headers). Auth modes:
-- `userJwtOptional` — tries auth, continues unauthenticated if absent
-- `userJwtRequired` — 401 if no user JWT
-- `appOrUserJwtRequired` / `appAndUserJwtRequired` — for write operations
+v2 also accepts a user JWT and an app JWT at the same time (comma-separated, or in separate headers). The server's auth modes:
+- `userJwtOptional`: uses the token if present, carries on unauthenticated if not
+- `userJwtRequired`: 401 without a user JWT
+- `appOrUserJwtRequired` / `appAndUserJwtRequired`: for writes
 
----
+## v2 field selection
 
-## v2 Field Selection
-
-**Critical v2 behavior:** Without a `fields` parameter, responses return almost nothing — only `uuid` by default. You must explicitly request fields.
-
-`fields` accepts multiple formats:
+Without a `fields` parameter a v2 response returns only `uuid`. `fields` accepts several formats:
 
 | Format | Example |
 |--------|---------|
 | Comma-delimited string | `fields=species_guess,observed_on` |
-| Dot-notation for nested | `fields=user.login,taxon.name` |
+| Dot notation for nested | `fields=user.login,taxon.name` |
 | RISON object | `fields=(species_guess:!t,user:(login:!t))` |
 | JSON body (POST) | `{"fields": {"species_guess": true, "user": {"login": true}}}` |
-| Special value `all` | `fields=all` — returns everything (equivalent to v1 behavior) |
+| Everything | `fields=all` (the same as v1) |
 
-Nested dicts: `true` means include the field; omitting means exclude. Parent fields with `{all: true}` include all their children.
+In nested objects, `true` includes a field and leaving it out excludes it. A parent with `{all: true}` includes all its children.
 
-**POST for complex field selection:** When the `fields` dict is specified or you're fetching >30 IDs, use POST with `X-HTTP-Method-Override: GET` header and the full params in the request body.
+**POST for large requests.** When you pass a `fields` object, or fetch more than 30 ids, send a POST with the header `X-HTTP-Method-Override: GET` and put the full parameters in the body.
 
-**Available top-level observation fields:**
+**Top-level observation fields:**
 
 | Category | Fields |
 |----------|--------|
@@ -65,247 +77,160 @@ Nested dicts: `true` means include the field; omitting means exclude. Parent fie
 | Media | `photos`, `sounds`, `observation_photos`, `observation_sounds` |
 | Social | `identifications`, `comments`, `annotations`, `flags`, `faves`, `votes` |
 | Counts | `identifications_count`, `comments_count`, `faves_count`, `cached_votes_total` |
-| OFVs | `ofvs` — array of observation field values (see below) |
+| Observation fields | `ofvs` (see [below](#observation-field-values-ofvs)) |
 | Quality | `quality_grade`, `quality_metrics`, `id_please` |
 | Projects | `project_ids`, `project_observations`, `non_traditional_projects` |
 | Status | `mappable`, `captive`, `out_of_range`, `spam` |
 | Meta | `tags`, `outlinks`, `uri`, `license_code`, `preferences`, `application`, `site_id` |
 
-Note: `location` in v2 is part of `geojson` (GeoJSON point), not a separate field.
+`location` is not a separate field in v2. It is part of `geojson`, a GeoJSON point.
 
----
+## Search parameters
 
-## Observation Field Values (OFVs)
+**Combining:** parameters combine with AND. Commas inside one parameter mean OR.
 
-iNaturalist lets observers attach custom key-value data to observations via "observation fields." These are community-defined typed fields (text, numeric, taxon, date, etc.).
-
-### Filtering by OFVs (search parameters)
-
-Query syntax:
-```
-field:Habitat%20(s%20Afr)            # has field with any value
-field:Habitat%20(s%20Afr)=Nama%20Karoo  # has field with specific value
-without_field=Habitat                # lacks this field
-```
-
-### OFVs in responses
-
-Request the `ofvs` field to get OFV data on returned observations. Each OFV object contains:
-- `field_id` — numeric ID of the observation field definition
-- `name` — field name
-- `value` — the value stored (string representation)
-- `datatype` — `text`, `numeric`, `taxon`, `date`, `datetime`, `time`, `dna`, `location`
-- `taxon` — (if datatype=taxon) the associated taxon object
-
-### Managing OFVs (write)
-
-- Create/update: `POST /v1/observation_field_values` with `{observation_id, observation_field_id, value}`
-- Delete: `DELETE /v1/observation_field_values/{id}`
-- Find field IDs: `GET /v1/observation_fields/autocomplete?q=name`
-
----
-
-## Key Search Parameters
+**Defaults you may not expect:**
+- Explore mode: `verifiable=true`.
+- Identify mode: `quality_grade=needs_id` and `reviewed=false`.
+- To remove every filter: `quality_grade=any&reviewed=any&verifiable=any&place_id=any`.
 
 ### Taxonomy
+
 | Param | Notes |
 |-------|-------|
-| `taxon_id` / `taxon_ids` | Numeric ID(s); comma-separated = OR |
-| — | **Retired taxa:** on `/taxa`, the `id=` param filters them out while the `/taxa/{ids}` path form returns them with `is_active: false` and `current_synonymous_taxon_ids`. See Known Gotchas #10. |
-| `taxon_name` | Scientific or common name. **Gotcha:** misspelling returns all taxa silently. Common names matching multiple taxa return only the first match. Use IDs for precision. |
-| `without_taxon_id` | Exclude taxon(s) |
-| `ident_taxon_id` | Has an active ID for taxon (not necessarily community consensus) |
-| `identified` | `true`/`false` — has any identification |
+| `taxon_id` / `taxon_ids` | Numeric id(s); comma-separated = OR |
+| `taxon_name` | Scientific or common name. A misspelling returns all taxa, silently. A common name matching several taxa returns only the first. Use ids when precision matters |
+| `without_taxon_id` | Exclude taxa |
+| `ident_taxon_id` | Has an active identification of this taxon (not necessarily the community consensus) |
+| `identified` | `true`/`false`: has any identification |
 | `disagreements` | `true`/`false`/`any` |
 | `native` / `introduced` / `threatened` | `true`/`false`/`any` |
 
+On `/taxa`, the `id=` parameter hides retired taxa and the `/taxa/{ids}` path form doesn't. See gotcha 10.
+
 ### Geography
+
 | Param | Notes |
 |-------|-------|
-| `place_id` | Single or multiple place IDs |
+| `place_id` | One or more place ids |
 | `nelat`, `nelng`, `swlat`, `swlng` | Bounding box |
 | `lat`, `lng`, `radius` | Circle search (radius in km) |
 | `geoprivacy` | `open`/`obscured`/`private`/`obscured_private` |
-| `taxon_geoprivacy` | Set by iNat based on conservation status |
+| `taxon_geoprivacy` | Set by iNaturalist from conservation status |
 | `mappable` | `true`/`false`/`any` |
-| `acc_above` / `acc_below` | Positional accuracy filter in meters |
+| `acc_above` / `acc_below` | Positional accuracy in meters |
 
 ### Time
+
 | Param | Notes |
 |-------|-------|
-| `d1` / `d2` | Observed date range. Accepts date-only (`2020-10-25`) **or** datetime (`2020-10-25T10:00-05:00`) — the form you pass changes the semantics; see below. |
-| `month`, `day`, `year`, `hour` | Specific time parts (month 1-12, hour 0-23) |
+| `d1` / `d2` | Observed date range. Takes a date (`2020-10-25`) or a datetime (`2020-10-25T10:00-05:00`), and the two behave differently (below) |
+| `month`, `day`, `year`, `hour` | Parts of the time (month 1–12, hour 0–23) |
 
-**`d1`/`d2` semantics depend on whether you include a time** (source: [`dateRangeFilter`](https://github.com/inaturalist/iNaturalistAPI/blob/97c7dac7cddab6d5ac84f336bf75d8e2fb866f4d/lib/util.js#L190)):
-- **Date-only** (`YYYY-MM-DD`) → matches on `observed_on_details.date`, the observation's **local calendar date**, **inclusive on both ends**. No timezone conversion — an observation counts on the date the observer recorded, regardless of your (or the server's) timezone. `d1=d2=2024-06-15` returns exactly that day. This is what you almost always want; it's immune to UTC-vs-local skew.
-- **With a time** (`...THH:mm:ssZ`) → matches on the `time_observed_at` **instant** for observations that have a time, falling back to the local date for those that don't. Use only when you genuinely need sub-day precision.
+How `d1`/`d2` behave depends on whether you include a time (source: [`dateRangeFilter`](https://github.com/inaturalist/iNaturalistAPI/blob/97c7dac7cddab6d5ac84f336bf75d8e2fb866f4d/lib/util.js#L190)):
 
-**Gotcha:** Timezone is ignored in month/day (and date-only `d1`/`d2`) searches — they reflect the locally recorded date, not any timezone param.
+- **Date only** (`YYYY-MM-DD`): matches the observation's **local calendar date** (`observed_on_details.date`), inclusive at both ends. There is no timezone conversion, so an observation counts on the date the observer recorded, whatever your timezone or the server's. `d1=d2=2024-06-15` returns exactly that day. This is what you almost always want.
+- **With a time** (`…THH:mm:ssZ`): matches the `time_observed_at` instant for observations that have one, and falls back to the local date for those that don't. Use it only when you need precision finer than a day.
+
+Date-only `d1`/`d2` and `month`/`day` ignore any timezone parameter, because they use the locally recorded date.
 
 ### Who
+
 | Param | Notes |
 |-------|-------|
-| `user_id` | Login name or numeric ID (don't mix types in one request) |
-| `not_user_id` | Exclude observer |
+| `user_id` | Login or numeric id. Don't mix the two in one request |
+| `not_user_id` | Exclude an observer |
 | `ident_user_id` | Filter by who made an identification |
-| `site_id` | Network affiliation (1=iNaturalist, 9=ALA, 25=UK, ...) |
+| `site_id` | Network affiliation (1 = iNaturalist, 9 = ALA, 25 = UK, …) |
 
-### Quality & Projects
+### Quality, media and projects
+
 | Param | Notes |
 |-------|-------|
 | `quality_grade` | `research`/`needs_id`/`casual`/`any` |
-| `verifiable` | `true`/`false`/`any` (Explore mode defaults to `true`) |
+| `verifiable` | `true`/`false`/`any` |
 | `captive` | `true`/`false`/`any` |
-| `photos` / `sounds` | `true`/`false` — media presence |
+| `photos` / `sounds` | `true`/`false`: has media |
 | `project_id` | Filter by project |
 | `license` | Observation license |
-| `photo_license` | `cc0`, `cc-by`, `cc-by-sa`, `cc-by-nc` (lowercase) |
+| `photo_license` | `cc0`, `cc-by`, `cc-by-sa`, `cc-by-nc`. Lowercase only |
 
 ### Annotations
+
 | Param | Notes |
 |-------|-------|
-| `term_id` | Annotation group: 1=Life Stage, 9=Sex, 12=Flowers/Fruits, 17=Alive/Dead, 22=Evidence of Presence, 33=Established, 36=Leaves |
-| `term_value_id` | Specific annotation values (comma-separated = OR) |
-| `term_id_or_unknown` | Include null-valued annotations |
+| `term_id` | Annotation group: 1 = Life Stage, 9 = Sex, 12 = Flowers/Fruits, 17 = Alive/Dead, 22 = Evidence of Presence, 33 = Established, 36 = Leaves |
+| `term_value_id` | Specific values (comma-separated = OR) |
+| `term_id_or_unknown` | Include observations where the annotation is unset |
 
-### Logic
-- Parameters combine with **AND**; commas within a single parameter use **OR**
-- Explore mode defaults: `verifiable=true`
-- Identify mode defaults: `quality_grade=needs_id`, `reviewed=false`
-- Override everything: `quality_grade=any&reviewed=any&verifiable=any&place_id=any`
+## Observation field values (OFVs)
 
----
+Observers can attach custom typed key-value data to an observation through community-defined "observation fields".
 
-## Pagination & Rate Limits
-
-Two ways to page. **Prefer id-keyset for anything that must be a consistent snapshot** (reconcile, sync, exporting a whole window); use `page`-number only for shallow, one-shot reads where a little drift is harmless.
-
-- **Page-number:** `page` + `per_page` (max 200). Simple, but caps at 10,000 total records **and is non-atomic over a live/mutating window** — `d2`=today, so an observation created/edited/deleted between two page requests shifts `total_results` and slides records across the `page`×`per_page` offset boundary, silently dropping or duplicating rows. Fine for a quick look; wrong for a snapshot.
-- **id-keyset (cursor):** `order_by=id&order=asc&id_above=<lastId>`, `id_above=0` to start. The cursor is an **immutable id**, so mid-page mutation can't drift the sweep — a new observation always gets a *higher* id (swept if in range, ignored if past the cursor), an edit keeps its id/place, a delete just doesn't appear. This is the drift-immune choice; sidestepping the 10k cap is a bonus, not the main reason. `id_below` + `order=desc` walks newest-first.
-- **By id:** `/v2/observations?id=1,2,3` takes a comma-separated list, and the other search params still filter it. 200 ids in one GET (a URL of about 1.8 KB) returns all 200. An id that no longer matches the filters, or was deleted, is simply absent.
-- **Rate limits:** Hard cap 100 req/min; keep to ≤60 req/min in practice
-- **Media download limits:** 5 GB/hour, 24 GB/day — exceeding causes permanent IP block
-
-Two subtleties that make a keyset sweep *provably complete*:
-- **Stop on a short page, not just an empty one.** iNat returns exactly `per_page` rows for every page but the last, so a page with `< per_page` rows (including 0) is terminal — it can't be followed by more. Breaking only on an empty page (`if not results`) still works but costs one extra request whenever the total is an exact multiple of `per_page`.
-- **Advance the cursor by the max *raw* id — before any client-side filtering.** If you drop rows locally (e.g. out-of-scope records) and then compute the cursor from the *kept* rows, a trailing dropped row never advances the cursor and the sweep stalls or re-fetches. Use the last raw result's id.
-
+**Filtering by OFV:**
 ```
-# id-keyset sweep — the correct pattern for a consistent snapshot
-last_id = 0
-loop:
-    GET /v2/observations?taxon_id=47792&order_by=id&order=asc
-        &id_above={last_id}&per_page=200&fields=...
-    results = the page's results array   # raw, before any local filtering
-    ... accumulate / filter locally ...
-    if len(results) < 200: break         # short (or empty) page → terminal
-    last_id = results[-1].id             # max RAW id (results are asc by id)
+field:Habitat%20(s%20Afr)               # has the field, any value
+field:Habitat%20(s%20Afr)=Nama%20Karoo  # has the field with this value
+without_field=Habitat                   # lacks the field
 ```
 
----
+**Reading OFVs:** request `ofvs`. Each entry has:
+- `field_id`: numeric id of the field definition
+- `name`: the field's name
+- `value`: the stored value, as a string
+- `datatype`: `text`, `numeric`, `taxon`, `date`, `datetime`, `time`, `dna` or `location`
+- `taxon`: the taxon object, when `datatype` is `taxon`
 
-## Identifications & Comments
+**Writing OFVs (v1):**
+- Create or update: `POST /v1/observation_field_values` with `{observation_id, observation_field_id, value}`
+- Delete: `DELETE /v1/observation_field_values/{id}`
+- Find a field's id: `GET /v1/observation_fields/autocomplete?q=name`
 
-Both come back on an observation when requested in `fields`; v2 returns neither by default.
+## Pagination and rate limits
 
-**Identification** fields (v2): `id`, `uuid`, `body` (what the identifier wrote; usually null), `created_at`, `current` (false once the identifier withdrew it or replaced it with a newer one of their own), `category` (`improving`/`supporting`/`leading`/`maverick`: its standing against the community taxon, so a derived value), `own_observation` (the observer's own identification), `disagreement` (null on the observer's own and on the first identification; otherwise whether it disagreed with what came before), `hidden` (hidden by moderators), `vision` (the identifier took the computer-vision suggestion), `user`, `taxon`. Every observation with a taxon has at least one identification, so an empty list on such an observation means the field selection is wrong.
+- `per_page` defaults to 30. Set it to 200, the maximum.
+- `page` is fine for a shallow, one-off read. It stops at 10,000 records and can drop or repeat rows if data changes mid-sweep.
+- For anything that must be a consistent snapshot, page by id with `order_by=id&order=asc&id_above=<lastId>`. Details and a loop in [references/pagination.md](references/pagination.md).
+- Fetch up to 200 specific observations in one GET with `id=1,2,3`.
+- **Rate limit:** 100 requests a minute is the hard cap. Stay at or under 60.
+- **Media downloads:** 5 GB an hour and 24 GB a day. Going over gets your IP blocked permanently.
 
-**Comment** fields (v2): `id`, `uuid`, `body`, `created_at`, `hidden`, `user`. Requesting `updated_at` on a comment returns nothing.
+## v2-only endpoints
 
-Treat `user` on either as nullable, and a hidden comment's `body` too: a strict schema that validates a whole page at once would let one odd entry refuse the page every time it comes round.
-
-**Incremental sync: `updated_since` sees identifications but not comments.** A new identification moves the observation's served `updated_at` in itself, not by way of the community taxon or quality grade it might change. In 270 sampled observations whose latest identification was a third-or-later agreement with an already-settled taxon, so it changed neither, `updated_at` moved every time. Before those, none of 675 identifications by others postdated it. The mechanism is the identification count. An identification's commit callbacks are declared [`update_observation`, then `update_obs_stats`](https://github.com/inaturalist/inaturalist/blob/b1274a0b6cbf757600ff435135867b7b4021f33c/app/models/identification.rb#L48-L51), and they run in reverse: the app is on Rails 6.1 with `load_defaults 5.0`, and in-order transaction callbacks only arrived with Rails 7.1. So [`Observation#update_stats`](https://github.com/inaturalist/inaturalist/blob/b1274a0b6cbf757600ff435135867b7b4021f33c/app/models/observation.rb#L2528-L2567) first sets `identifications_count` on the in-memory observation and writes it with `update_all`, which leaves the attribute marked changed. Then [`Identification#update_observation`](https://github.com/inaturalist/inaturalist/blob/b1274a0b6cbf757600ff435135867b7b4021f33c/app/models/identification.rb#L299-L335) ends in `observation.update(attrs)`, which has that changed attribute to save, and saving moves `updated_at`. Not verified: a withdrawal, which is an update rather than a create and usually changes the agreement counts the same way, and a deletion, which runs separate callbacks. A comment doesn't: in 4 of 15 sampled observations with comments, the latest comment was newer than the observation's `updated_at`. The Rails app does write a new `updated_at` to the database when a comment is created ([`Comment#update_parent_counter_cache`](https://github.com/inaturalist/inaturalist/blob/b1274a0b6cbf757600ff435135867b7b4021f33c/app/models/comment.rb#L89-L98), an `update_all`), then reindexes the observation ([`Comment#index_parent`](https://github.com/inaturalist/inaturalist/blob/b1274a0b6cbf757600ff435135867b7b4021f33c/app/models/comment.rb#L116-L127)). But `update_all` doesn't refresh the in-memory record, so the index, which the API serves and `updated_since` filters on, most likely keeps the old value. That mechanism is a reading of the source; the behaviour is observed. A sync built on `updated_since` therefore picks up a new comment only when something else touches the observation, or when it re-fetches the observation for its own reasons. 
-
-**Licensing.** An observation and each of its photos and sounds carry a license the observer chooses. Identifications and comments have no license setting, so iNaturalist's Terms of Service default applies: contributed content is licensed CC BY-NC "unless you specify otherwise when you post". Someone else's identification or comment on an observation is their content under that default, not covered by the observation's license. Asked on the forum ([Comment licensing](https://forum.inaturalist.org/t/comment-licensing/80310), 2026-06): community replies agree, and no staff answered, as of 2026-10. The Terms page (`/pages/terms`) sits behind a Cloudflare challenge that refuses non-browser clients, so it can't be fetched by script.
-
----
-
-## Geoprivacy & Private Fields
-
-| Field | Notes |
-|-------|-------|
-| `geojson` | Public GeoJSON point (may be obscured centroid) |
-| `private_geojson` | Exact GeoJSON point — only with auth + observer trust |
-| `place_ids` / `private_place_ids` | Place IDs from public vs private coords |
-| `place_guess` / `private_place_guess` | Place name from public vs private coords |
-| `geoprivacy` | `open` / `obscured` / `private` (set by observer). May arrive as `null` **or** the explicit string `"open"` — treat them as equivalent |
-| `taxon_geoprivacy` | Set automatically by iNat based on conservation status. Same `null`-vs-`"open"` caveat (explicit `"open"` observed in the wild) |
-| `obscured` | Bool — true means shown as broad area, not exact point |
-| `positional_accuracy` | Real GPS accuracy of the true location. **Delivered to everyone — even anonymous requesters on obscured observations.** Only the coordinates themselves are protected |
-| `public_positional_accuracy` | The obscured value (~26,500 m for obscured records); equals `positional_accuracy` when open |
-| `viewer_trusted_by_observer` | **Personal** trust only — false does NOT mean you lack coordinate access (see below) |
-
-Private coordinates require auth AND one of four cases (server source:
-[`Observation#removeUnviewableGeo`](https://github.com/inaturalist/iNaturalistAPI/blob/97c7dac7cddab6d5ac84f336bf75d8e2fb866f4d/lib/models/observation.js#L81-L148)):
-- **Self**: you are the observer.
-- **Personal trust**: the observer trusts your account directly. The *only*
-  case where `viewer_trusted_by_observer` is true — the flag reflects
-  personal trust and nothing else.
-- **Traditional-project curator**: the observation was submitted to a
-  traditional project you curate and that submission allows curator
-  coordinate access (a stored, per-observation preference). Works in **any**
-  query context — membership lives on the observation.
-- **Collection-project curator**: you curate a collection project the
-  observation falls in, the project enables user trust
-  (`prefers_user_trust`), its requirements have been stable for 7+ days, and
-  the observer opted in (`prefers_curator_coordinate_access_for`: `"any"`,
-  or `"taxon"` = taxon-obscured only). Collection membership is computed,
-  not stored: this case applies **only when your authenticated search names
-  exactly that one collection project** (`project_id=...`) — fetching the
-  same observation by id, without `project_id`, or naming two projects
-  withholds the private fields
-  ([the grafting](https://github.com/inaturalist/iNaturalistAPI/blob/97c7dac7cddab6d5ac84f336bf75d8e2fb866f4d/lib/controllers/v1/observations_controller.js#L159-L187);
-  [`CURATOR_COORDINATE_ACCESS_WAIT_DAYS`](https://github.com/inaturalist/iNaturalistAPI/blob/97c7dac7cddab6d5ac84f336bf75d8e2fb866f4d/lib/models/project_user.js#L57)).
-
-Consequences:
-- **The reliable "do I have the true coordinates?" signal is the presence of `private_geojson` in the response, not `viewer_trusted_by_observer`** — the flag is false in three of the four cases, including your own observations.
-- For **collection projects only**, trust is per-query-context: the same observation returns different projections depending on which `project_id` the query names. Traditional-project curator access follows the observation everywhere.
-- Being authenticated is not enough: a non-curator's token querying a project gets exactly the anonymous projection for obscured records (except `positional_accuracy`, which everyone gets).
-- `obscured` stays `true` even when you receive the true coordinates — it describes the public representation, not your access.
-- Requested private fields you lack access to are **omitted from the response entirely**, not returned as null (`viewer_trusted_by_observer` itself is omitted on anonymous requests) — another reason presence-testing is the right pattern.
-- `project_observations.preferences` serializes as `{}` even where curator coordinate access is granted — don't audit access by reading preferences; fetch with the curator token and test `private_geojson` presence.
-
----
-
-## v2-Only Endpoints
-
-Beyond the core CRUD endpoints shared with v1, v2 adds:
-- `GET /v2/observations/{uuid}` — fetch by UUID (v1 uses integer ID)
-- `GET /v2/taxon_id_summaries` — taxon identification summaries
+- `GET /v2/observations/{uuid}`: fetch by UUID (v1 uses the integer id)
+- `GET /v2/taxon_id_summaries`: taxon identification summaries
 - `GET /v2/exemplar_identifications`
-- Map tile endpoints: `/v2/grid`, `/v2/heatmap`, `/v2/points`, `/v2/taxon_places/{taxon_id}`, `/v2/taxon_ranges/{taxon_id}`, `/v2/geomodel/{taxon_id}`
+- Map tiles: `/v2/grid`, `/v2/heatmap`, `/v2/points`, `/v2/taxon_places/{taxon_id}`, `/v2/taxon_ranges/{taxon_id}`, `/v2/geomodel/{taxon_id}`
 
-v2 observations use **UUIDs** as primary identifier; integer IDs are still present but secondary. The server converts UUIDs to serial IDs internally.
+v2 observations use UUIDs as the main identifier. Integer ids are still present. The server converts UUIDs to integer ids internally.
 
----
+## Known gotchas
 
-## Known Gotchas
+One line each. Entries marked **→** have a longer account in [references/gotchas.md](references/gotchas.md) or the file named.
 
-1. **v2 default fields are nearly empty** — just `uuid`. Always specify `fields`.
-2. **Page-number pagination drifts over a live window** — offsets are non-atomic, so a mutation mid-sweep drops/duplicates rows (and it caps at 10k records). Use id-keyset (`id_above`/`id_below` + `order_by=id`) for any consistent snapshot; stop on a short page and advance the cursor by the max raw id. See Pagination.
-3. **Taxon name ambiguity** — misspelling or ambiguous common name returns wrong/all taxa silently.
-4. **Timezone in date filters** — month/day and **date-only `d1`/`d2`** queries use the observation's locally recorded calendar date (inclusive both ends), ignoring any timezone param. Pass a datetime to `d1`/`d2` only when you need instant-level (`time_observed_at`) precision. See Time.
-5. **Deleted users** — queries return empty results with no error.
-6. **`/observations/observers` bug** — stops at ~500 records with `order_by=species_count`; returns duplicates and 500 errors beyond that.
-7. **Photo license case** — must be lowercase (`cc-by`, not `CC-BY`).
-8. **`per_page` default is 30** — always set higher (up to 200).
-9. **`viewer_trusted_by_observer: false` does not mean untrusted** — project-curator trust delivers `private_geojson` with that flag false. Test for the presence of `private_geojson` instead. See Geoprivacy & Private Fields.
-10. **`/taxa?id=` hides retired taxa; `/taxa/{ids}` does not** — same API version, different route, different result set. The query-param form filters to active taxa and reports `total_results: 0` for a retired one, with nothing to say it ever existed; the path form returns it with `is_active: false` and `current_synonymous_taxon_ids` naming its replacement. This bites hardest in a closure resolver that treats "requested but not returned" as a failure: a taxon retired since you last saw it silently becomes an unresolvable id. Use the path form whenever an id might be retired, and request `is_active` and `current_synonymous_taxon_ids` explicitly (v2 returns neither by default). Note also that `GET /observations?taxon_id=<retired>` returns 0 — iNaturalist reassigns observations to the successor, so the retired id keeps nothing.
-11. **One OAuth callback URL per app** — an iNat OAuth app registration holds exactly one redirect URI (no multi-URI list, despite Doorkeeper supporting it elsewhere). Every flow sharing the app (web sign-in, CLI logins) must share that one callback; plan ports/paths accordingly.
-12. **`updated_since` misses new comments** — a comment doesn't move the observation's served `updated_at`, though an identification does. A sync keyed on it needs some other re-fetch to pick comments up. See Identifications & Comments.
-13. **User profiles have no bulk route, but observers do** — `/v1/users/{id}` and `/v2/users/{id}` each take one id (a comma list answers 404 "User does not exist"). `/v1/observations/observers?user_id=<id,id,…>&quality_grade=any&verifiable=any&per_page=200` returns each listed user who has any observation with their full user record, so 150 ids fit one request (440 accounts in 3, 2026-10-10). A user with no observations is absent from it.
-14. **ORCID is a connected account, not a profile field** — a user links it under Settings → Applications → Connected Accounts → ORCID, which signs them in to ORCID and stores it as a provider authorization ([`User#orcid`](https://github.com/inaturalist/inaturalist/blob/b1274a0b6cbf757600ff435135867b7b4021f33c/app/models/user.rb#L799)). The API returns it as `orcid` (a full `https://orcid.org/…` URI) on the user record, and iNaturalist's GBIF dataset writes it as `recordedByID` on that user's observations. Few people connect one: 2 of 437 bee-atlas volunteers' accounts in 2026-10, though experts among them have ORCIDs they never linked.
-15. **A flagged photo keeps `hidden: false` but loses its URL** — while a photo has an unresolved flag for copyright infringement, or one for AI-generated content, the API serves its `url` (and every size) as a placeholder of iNaturalist's own, such as `https://www.inaturalist.org/assets/copyright-infringement-square.png` or `.../artificially-generated-content-square.png`, and `hidden` stays false. A photo moderators hid gets `media-hidden-<size>.png`. All three come from [`Photo#sized_url`](https://github.com/inaturalist/inaturalist/blob/2c2bec7eee618a3c7ec8b984c16ac3d457a19985/app/models/photo.rb#L102-L113). Filtering on `hidden` alone therefore lets the placeholders through, and they can't be shown on another site: a browser on another origin is refused them, with `Cross-Origin-Resource-Policy: same-origin` (`net::ERR_BLOCKED_BY_RESPONSE.NotSameOrigin`), so the page shows a broken image. Drop a photo whose URL path matches `/assets/(copyright-infringement|artificially-generated-content|media-hidden)-`, matching on the path so a change of asset host doesn't matter, or request the photo's `flags` (v1 returns them; v2 needs `observation_photos.photo.flags.flag,…resolved`) and drop any with an unresolved flag of those two kinds. Raising the flag moved the observation's `updated_at` within 2 s on both observations seen, so an `updated_since` sync picks the placeholder up. Whether resolving a flag moves it too is not verified.
-
----
+1. **v2 returns only `uuid` by default.** Always pass `fields`.
+2. **`page` drifts on live data.** Use id paging for a consistent snapshot. → [pagination](references/pagination.md)
+3. **Taxon names fail silently.** A misspelling or ambiguous common name matches the wrong taxa, or all of them.
+4. **Dates are local.** Date-only `d1`/`d2` and `month`/`day` use the locally recorded date and ignore timezone. Pass a datetime only for instant-level precision. See [Time](#time).
+5. **Deleted users** return empty results with no error.
+6. **`/observations/observers` breaks past about 500 records** with `order_by=species_count`, returning duplicates and 500 errors.
+7. **Photo license is lowercase:** `cc-by`, not `CC-BY`.
+8. **`per_page` defaults to 30.** Set it to 200.
+9. **`viewer_trusted_by_observer: false` doesn't mean you lack coordinates.** Test for `private_geojson` instead. → [geoprivacy](references/geoprivacy.md)
+10. **`/taxa?id=` hides retired taxa, but `/taxa/{ids}` returns them** with `is_active: false` and `current_synonymous_taxon_ids`. Use the path form when an id might be retired. → [detail](references/gotchas.md#10-taxaid-hides-retired-taxa-taxaids-does-not)
+11. **One OAuth callback URL per app.** Every flow sharing the app must share it. → [detail](references/gotchas.md#11-one-oauth-callback-url-per-app)
+12. **`updated_since` misses new comments,** though it catches new identifications. → [detail](references/identifications-and-comments.md#incremental-sync-and-updated_since)
+13. **No bulk route for user profiles, but `/v1/observations/observers?user_id=a,b,c` returns many users at once.** → [detail](references/gotchas.md#13-user-profiles-have-no-bulk-route-but-observers-do)
+14. **ORCID is a connected account,** not a profile field, and few users link one. → [detail](references/gotchas.md#14-orcid-is-a-connected-account-not-a-profile-field)
+15. **A photo with an unresolved copyright or AI-content flag keeps `hidden: false`** but its URL becomes a placeholder that other sites can't display. Drop URLs under `/assets/(copyright-infringement|artificially-generated-content|media-hidden)-`. → [detail](references/gotchas.md#15-a-flagged-photo-keeps-hidden-false-but-loses-its-url)
 
 ## Sources
 
-Authoritative places to verify or go deeper:
+Where to verify a claim or go deeper:
 
-- **API reference (Swagger)**: [v2](https://api.inaturalist.org/v2/docs/) · [v1](https://api.inaturalist.org/v1/docs/)
-- **API server source** — the response filtering and query building described here: https://github.com/inaturalist/iNaturalistAPI. Inline code links are permalinks pinned to the revision the claim was verified against (`97c7dac`, 2026-04); to find a symbol's current form, use GitHub symbol search, e.g. [`symbol:removeUnviewableGeo`](https://github.com/search?q=repo%3Ainaturalist%2FiNaturalistAPI+symbol%3AremoveUnviewableGeo&type=code) (requires sign-in)
-- **Rails app source** — obscuring, geoprivacy, projects, and everything upstream of the API: https://github.com/inaturalist/inaturalist
-- **Search URL wikis** — community-maintained canonical reference for query parameters: [part 1](https://forum.inaturalist.org/t/how-to-use-inaturalists-search-urls-wiki-part-1-of-2/63) · [part 2](https://forum.inaturalist.org/t/how-to-use-inaturalists-search-urls-wiki-part-2-of-2/18792)
-- **Geoprivacy explained** (user-facing semantics of obscuring): https://help.inaturalist.org/en/support/solutions/articles/151000169938
-- **Help center & forum** — staff answers on API behavior: https://help.inaturalist.org/ · https://forum.inaturalist.org/
+- **API reference:** [v2](https://api.inaturalist.org/v2/docs/) · [v1](https://api.inaturalist.org/v1/docs/)
+- **API server source** (response filtering and query building): https://github.com/inaturalist/iNaturalistAPI. Inline code links are permalinks pinned to the revision the claim was checked against (`97c7dac`, 2026-04). To find a symbol's current form, use GitHub symbol search, for example [`symbol:removeUnviewableGeo`](https://github.com/search?q=repo%3Ainaturalist%2FiNaturalistAPI+symbol%3AremoveUnviewableGeo&type=code) (needs sign-in)
+- **Rails app source** (obscuring, geoprivacy, projects, and everything behind the API): https://github.com/inaturalist/inaturalist
+- **Search URL wikis** (community-maintained list of query parameters): [part 1](https://forum.inaturalist.org/t/how-to-use-inaturalists-search-urls-wiki-part-1-of-2/63) · [part 2](https://forum.inaturalist.org/t/how-to-use-inaturalists-search-urls-wiki-part-2-of-2/18792)
+- **Geoprivacy explained** (what obscuring means to users): https://help.inaturalist.org/en/support/solutions/articles/151000169938
+- **Help center and forum** (staff answers on API behavior): https://help.inaturalist.org/ · https://forum.inaturalist.org/

@@ -1,0 +1,55 @@
+# Gotchas in detail
+
+[SKILL.md](../SKILL.md) lists every gotcha in one line, numbered. This file holds the long entries. Numbers match.
+
+## 10. `/taxa?id=` hides retired taxa; `/taxa/{ids}` does not
+
+The difference is the route, not the API version. The query-parameter form filters to active taxa and reports `total_results: 0` for a retired one, with nothing to say it ever existed. The path form returns the taxon with `is_active: false` and `current_synonymous_taxon_ids` naming its replacement.
+
+This bites hardest in a resolver that treats "requested but not returned" as a failure. A taxon retired since you last saw it silently becomes an unresolvable id.
+
+- Use the path form whenever an id might be retired. Comma-separated ids work on it.
+- Request `is_active` and `current_synonymous_taxon_ids` explicitly, since v2 returns neither by default.
+- `GET /observations?taxon_id=<retired>` returns 0. iNaturalist reassigns observations to the successor, so the retired id keeps nothing.
+
+Example: `1368491` (*Sagmatias obliquidens*) was retired in favour of `1664971`. Receipts in [CHANGES.md](../CHANGES.md#2026-08-28--retired-taxa-are-visible-on-taxaids-but-not-taxaid-verified-live).
+
+## 11. One OAuth callback URL per app
+
+An iNaturalist OAuth app registration holds exactly one redirect URI, with no multi-URI list, even though Doorkeeper supports one elsewhere. Every flow that shares the app (web sign-in, CLI logins) must share that one callback, so plan ports and paths accordingly.
+
+## 13. User profiles have no bulk route, but observers do
+
+`/v1/users/{id}` and `/v2/users/{id}` each take one id. A comma list answers 404 "User does not exist".
+
+`/v1/observations/observers?user_id=<id,id,…>&quality_grade=any&verifiable=any&per_page=200` returns each listed user who has any observation, with their full user record. 150 ids fit in one request (440 accounts in 3 requests, 2026-10-10). A user with no observations is absent from the response.
+
+## 14. ORCID is a connected account, not a profile field
+
+A user links ORCID under Settings → Applications → Connected Accounts → ORCID. That signs them in to ORCID and stores it as a provider authorization ([`User#orcid`](https://github.com/inaturalist/inaturalist/blob/b1274a0b6cbf757600ff435135867b7b4021f33c/app/models/user.rb#L799)).
+
+- The API returns it as `orcid`, a full `https://orcid.org/…` URI, on the user record.
+- iNaturalist's GBIF dataset writes it as `recordedByID` on that user's observations.
+- Few people connect one: 2 of 437 bee-atlas volunteers' accounts in 2026-10, though experts among them have ORCIDs they never linked.
+
+## 15. A flagged photo keeps `hidden: false` but loses its URL
+
+While a photo has an unresolved flag for copyright infringement, or one for AI-generated content, the API serves its `url` (and every size) as a placeholder image of iNaturalist's own, and `hidden` stays false. A photo that moderators hid gets a similar placeholder.
+
+| Cause | Placeholder path |
+|-------|------------------|
+| Unresolved copyright flag | `/assets/copyright-infringement-<size>.png` |
+| Unresolved AI-generated-content flag | `/assets/artificially-generated-content-<size>.png` |
+| Hidden by moderators | `/assets/media-hidden-<size>.png` |
+
+All three come from [`Photo#sized_url`](https://github.com/inaturalist/inaturalist/blob/2c2bec7eee618a3c7ec8b984c16ac3d457a19985/app/models/photo.rb#L102-L113).
+
+**Why it matters.** Filtering on `hidden` alone lets the placeholders through. They can't be shown on another site: a browser on another origin is refused them, with `Cross-Origin-Resource-Policy: same-origin` (`net::ERR_BLOCKED_BY_RESPONSE.NotSameOrigin`), so the page shows a broken image.
+
+**How to filter.** Either of these:
+- Drop a photo whose URL path matches `/assets/(copyright-infringement|artificially-generated-content|media-hidden)-`. Match on the path so a change of asset host doesn't matter.
+- Request the photo's `flags` and drop any with an unresolved flag of those two kinds. v1 returns flags; v2 needs `observation_photos.photo.flags.flag,observation_photos.photo.flags.resolved`.
+
+**Sync.** Raising the flag moved the observation's `updated_at` within 2 seconds on both observations seen, so an `updated_since` sync picks the placeholder up. Whether resolving a flag moves it too is not verified.
+
+Receipts in [CHANGES.md](../CHANGES.md#2026-10-15--a-flagged-photos-url-becomes-a-placeholder-with-hidden-false).

@@ -4,7 +4,8 @@ Skills for AI coding agents (Claude Code and compatible tools). Each
 directory is one skill: a `SKILL.md` whose frontmatter `description` tells
 the agent when to load it, and whose body is the working knowledge — verified
 behavior, gotchas, and patterns that correct an agent's wrong-by-default
-assumptions before they're exercised.
+assumptions before they're exercised. `SKILL.md` holds what most uses need;
+longer topics sit in the skill's `references/` directory, linked from it.
 
 ## Skills
 
@@ -27,8 +28,11 @@ ln -s "$PWD/skills/inaturalist" ~/.claude/skills/inaturalist
 
 Each skill states facts plainly and cites authoritative sources — inline for
 load-bearing claims, and in a closing Sources section for verification and
-deeper reading. Dated verification receipts — what was checked, when,
-against what — live in the skill's `CHANGES.md`. Corrections welcome — these
+deeper reading. Keep `SKILL.md` short and scannable: put long explanations and
+evidence in `references/`, and leave one line plus a link in `SKILL.md`.
+
+Dated verification receipts — what was checked, when, against what — live in
+the skill's `CHANGES.md`. Corrections welcome — these
 documents exist to be less wrong than an agent's priors. Maintained with the
 help of AI agents. 🤖
 
