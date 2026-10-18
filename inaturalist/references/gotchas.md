@@ -28,7 +28,7 @@ An iNaturalist OAuth app registration holds exactly one redirect URI, with no mu
 
 A user links ORCID under Settings → Applications → Connected Accounts → ORCID. That signs them in to ORCID and stores it as a provider authorization ([`User#orcid`](https://github.com/inaturalist/inaturalist/blob/b1274a0b6cbf757600ff435135867b7b4021f33c/app/models/user.rb#L799)).
 
-- The API returns it as `orcid`, a full `https://orcid.org/…` URI, on the user record.
+- The v1 API returns it as `orcid`, a full `https://orcid.org/…` URI, on the user record.
 - iNaturalist's GBIF dataset writes it as `recordedByID` on that user's observations.
 - Few people connect one: 2 of 437 bee-atlas volunteers' accounts in 2026-10, though experts among them have ORCIDs they never linked.
 

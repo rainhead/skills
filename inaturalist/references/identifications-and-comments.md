@@ -49,6 +49,6 @@ Not verified: a withdrawal (an update, not a create, which usually changes the a
 
 ## Licensing
 
-An observation and each of its photos and sounds carry a license the observer chooses. Identifications and comments have no license setting, so iNaturalist's Terms of Service default applies: contributed content is licensed CC BY-NC "unless you specify otherwise when you post". Someone else's identification or comment on an observation is therefore their content under that default, and the observation's license doesn't cover it.
+An observation and each of its photos and sounds carry a license the observer chooses. Identifications and comments have no license setting, so the Terms of Service default most likely applies: contributed content is licensed CC BY-NC "unless you specify otherwise when you post". The Terms don't say outright that identifications and comments count as contributed content, so this is an interpretation. On that reading, someone else's identification or comment is their content under the default, and the observation's license doesn't cover it.
 
 This was asked on the forum ([Comment licensing](https://forum.inaturalist.org/t/comment-licensing/80310), 2026-06). Community replies agree, and no staff had answered as of 2026-10. The Terms page (`/pages/terms`) sits behind a Cloudflare challenge that refuses non-browser clients, so a script can't fetch it.

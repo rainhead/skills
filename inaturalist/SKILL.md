@@ -63,7 +63,7 @@ Without a `fields` parameter a v2 response returns only `uuid`. `fields` accepts
 
 In nested objects, `true` includes a field and leaving it out excludes it. A parent with `{all: true}` includes all its children.
 
-**POST for large requests.** When you pass a `fields` object, or fetch more than 30 ids, send a POST with the header `X-HTTP-Method-Override: GET` and put the full parameters in the body.
+**POST for large requests.** When you pass a `fields` object, send a POST with the header `X-HTTP-Method-Override: GET` and put the full parameters in the body.
 
 **Top-level observation fields:**
 
