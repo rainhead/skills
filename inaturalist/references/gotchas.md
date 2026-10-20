@@ -53,3 +53,25 @@ All three come from [`Photo#sized_url`](https://github.com/inaturalist/inaturali
 **Sync.** Raising the flag moved the observation's `updated_at` within 2 seconds on both observations seen, so an `updated_since` sync picks the placeholder up. Whether resolving a flag moves it too is not verified.
 
 Receipts in [CHANGES.md](../CHANGES.md#2026-10-15--a-flagged-photos-url-becomes-a-placeholder-with-hidden-false).
+
+## 16. Spam comes back from search unless you ask for `spam=false`
+
+An observation iNaturalist knows is spam has `spam: true`, and its page on iNaturalist shows a spam notice instead of the observation; an observation whose owner is a spammer gets a 403 "suspended" page instead ([`block_if_spam`](https://github.com/inaturalist/inaturalist/blob/0e15a4a4bd64b914672be1e4e6492c272a79fa9a/lib/acts_as_spammable/action_controller/base.rb#L16-L32)). The API's observation search doesn't filter on it unless asked: `spam=true` or `spam=false` adds the term, and no parameter returns both ([`observation_query_builder.js`](https://github.com/inaturalist/iNaturalistAPI/blob/6695325b1e0fad0dc9579cede4b8da9df2f3fa24/lib/models/observation_query_builder.js#L1368-L1376)). v1 and v2 behave the same.
+
+`flags` can be empty on a spam observation, so test `spam`, not the flags. The owner's `user.spam` can still be false.
+
+**How to filter.** Pass `spam=false` on every observation search a sync makes, including fetches by `id`. An observation flagged after you stored it then drops out of the results, so a sync that reconciles a window (deletes what the window no longer returns) removes it. An `updated_since` sync alone won't, since nothing is returned to act on.
+
+## Detecting a takedown
+
+What each kind looks like in the API, so a mirror can follow iNaturalist when it takes something down:
+
+| Takedown | Observation in search | What to test |
+|----------|----------------------|--------------|
+| Observation known to be spam | Returned unless `spam=false` | `spam: true` (see 16) |
+| Photo flagged for copyright or as AI-generated | Returned, unflagged; `spam` false | The photo's URL is a placeholder (see 15), or an unresolved `copyright infringement` / AI-content flag in the photo's `flags` |
+| Photo hidden by moderators | Returned | `hidden: true`, and the `media-hidden` placeholder (see 15) |
+| Identification or comment hidden | Returned | That item's `hidden: true`; its body may be missing → [identifications-and-comments](identifications-and-comments.md) |
+| Observation deleted | Absent | Only a reconciled re-fetch of its window notices; nothing is returned for it |
+
+A photo takedown leaves the observation up, so the observation's own fields say nothing about it. Whether to drop the observation along with the photo is the caller's decision; SalishSea.io drops it, because the observer showed someone else's evidence (its decision 081).

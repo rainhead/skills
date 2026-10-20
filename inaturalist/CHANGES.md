@@ -1,5 +1,19 @@
 # Verification history
 
+## 2026-10-20 — spam comes back from search by default; what a takedown looks like
+
+Prompted by a sea otter observation on SalishSea.io whose only photo iNaturalist had taken down for copyright, and a search for the other ways iNaturalist takes things down.
+
+| Probe | Result |
+|---|---|
+| `/v1/observations/409281132` | photo 752497347's `url` is the copyright placeholder with an unresolved `copyright infringement` flag (2026-10-19T15:55:31Z); the observation has `spam: false`, `flags: []` |
+| `/v1/observations?spam=true&per_page=3` | 31,406 results, each `spam: true`; 409712408 has `user.spam: true`, 409501092 has `user.spam: false`; all have `flags: []` |
+| `/v2/observations?id=<9 spam ids>` with no `spam` param, then `spam=true`, then `spam=false` | 9, 9, 0 |
+| A box and taxon search on v2, without and with `spam=false` | 92,456 and 92,447 |
+| `/v2/observations?id=194285803&fields=spam,flags.flag,flags.resolved,user.spam,user.suspended` | `spam: true`, `flags: []`, `user.spam: false`, `user.suspended: false` |
+
+API source read at `6695325`: `observation_query_builder.js` adds a `spam` term only when the parameter is `"true"` or `"false"`. Rails source read at `0e15a4a`: `blocks_spam` on the observation pages renders `users/_suspended` (403) for an observation owned by a spammer and a spam notice for one that is `known_spam?`. Not verified: whether marking an observation as spam moves its `updated_at`; how a deleted observation answers a fetch by id.
+
 ## 2026-10-15 — a flagged photo's URL becomes a placeholder, with `hidden` false
 
 Prompted by a broken image on SalishSea.io's map, and its production smoke test failing on the console error (salishsea-io #691, #693).
