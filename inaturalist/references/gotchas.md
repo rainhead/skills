@@ -69,7 +69,7 @@ What each kind looks like in the API, so a mirror can follow iNaturalist when it
 | Takedown | Observation in search | What to test |
 |----------|----------------------|--------------|
 | Observation known to be spam | Returned unless `spam=false` | `spam: true` (see 16) |
-| Photo flagged for copyright or as AI-generated | Returned, unflagged; `spam` false | The photo's URL is a placeholder (see 15), or an unresolved `copyright infringement` / AI-content flag in the photo's `flags` |
+| Photo flagged for copyright or as AI-generated | Returned, with the observation's own `flags: []` and `spam: false` | The photo's URL is a placeholder (see 15), or an unresolved `copyright infringement` / AI-content flag in the photo's own flags (`observation_photos.photo.flags`) |
 | Photo hidden by moderators | Returned | `hidden: true`, and the `media-hidden` placeholder (see 15) |
 | Identification or comment hidden | Returned | That item's `hidden: true`; its body may be missing → [identifications-and-comments](identifications-and-comments.md) |
 | Observation deleted | Absent | Only a reconciled re-fetch of its window notices; nothing is returned for it |
