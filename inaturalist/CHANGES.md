@@ -1,5 +1,20 @@
 # Verification history
 
+## 2026-11-10 — where a location came from, and why its accuracy is missing
+
+Prompted by a question about why Oregon Bee Atlas observations lack an accuracy. Measured over 20,527 observations (2025–2026) from `www.inaturalist.org/observations.json` for projects 18521 and 166376, and 40,988 (2022–2026) from v2.
+
+| Probe | Result |
+|---|---|
+| `/v2/observations/<uuid>?fields=positioning_method,positioning_device` | neither field returned; `application` is |
+| `www.inaturalist.org/observations/413456232.json` | `positioning_method: gps`, `positioning_device: gps`, `oauth_application_id: 2` |
+| `/photos/762189933` with curl and with headless Chromium 1248 | Cloudflare "Just a moment…" (403) |
+| `/photos/762189933.json`, `/v1/photos/…`, `/v2/photos/…` | "Not found" or no route |
+| Pillow on `inaturalist-open-data…/photos/<id>/original.jpg` | no EXIF, only an ICC profile |
+| Accuracy null, by app | old Android 42% DMS-style coordinates (1% when accuracy is present); website 92% with four or fewer decimals |
+
+Source read: Rails `observation.rb` (`nilify_positional_accuracy_if_zero`, validation `greater_than: 0`), `uploader/models/dropped_file.js` (`GPSHPositioningError` only), Android `ObservationEditor.java` (`gps` on any latitude change; `positional_accuracy = null` on EXIF import), iOS Classic `ConfirmPhotoViewController.m` (accuracy from `PHAsset.location.horizontalAccuracy`). Then read 146 photo pages through Claude in Chrome, signed in: iOS Classic uploads have no EXIF (47 of 47, with and without accuracy); Android photos have GPS and no `GPSHPositioningError` (0 of 46); Android observations without accuracy match the photo's GPS within 1 m in 25 of 30. Not verified: why iOS Classic observations without accuracy mostly have five or six decimal places.
+
 ## 2026-10-20 — spam comes back from search by default; what a takedown looks like
 
 Prompted by a sea otter observation on SalishSea.io whose only photo iNaturalist had taken down for copyright, and a search for the other ways iNaturalist takes things down.

@@ -224,6 +224,7 @@ One line each. Entries marked **→** have a longer account in [references/gotch
 14. **ORCID is a connected account,** not a profile field, and few users link one. → [detail](references/gotchas.md#14-orcid-is-a-connected-account-not-a-profile-field)
 15. **A photo with an unresolved copyright or AI-content flag keeps `hidden: false`** but its URL becomes a placeholder that other sites can't display. Drop URLs under `/assets/(copyright-infringement|artificially-generated-content|media-hidden)-`. → [detail](references/gotchas.md#15-a-flagged-photo-keeps-hidden-false-but-loses-its-url)
 16. **Observation search returns spam unless you pass `spam=false`,** and `flags` can be empty on a spam observation; test `spam`. → [detail](references/gotchas.md#16-spam-comes-back-from-search-unless-you-ask-for-spamfalse) · what each kind of takedown looks like: [detecting a takedown](references/gotchas.md#detecting-a-takedown)
+17. **`positioning_method`/`positioning_device` are only in the website's JSON, and photo EXIF only on the photo page, to a signed-in browser.** Missing accuracy usually means a photo without `GPSHPositioningError` or typed coordinates. → [detail](references/gotchas.md#17-how-a-location-was-set-is-only-in-the-websites-json-and-photo-exif-is-out-of-reach)
 
 ## Sources
 

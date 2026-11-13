@@ -62,6 +62,18 @@ An observation iNaturalist knows is spam has `spam: true`, and its page on iNatu
 
 **How to filter.** Pass `spam=false` on every observation search a sync makes, including fetches by `id`. An observation flagged after you stored it then drops out of the results, so a sync that reconciles a window (deletes what the window no longer returns) removes it. An `updated_since` sync alone won't, since nothing is returned to act on.
 
+## 17. How a location was set is only in the website's JSON, and photo EXIF is out of reach
+
+`positioning_method` and `positioning_device` aren't in v1 or v2. The website's own JSON has them: `https://www.inaturalist.org/observations.json?projects[]=<id>&year=<y>&per_page=200&page=<n>` (or `/observations/<id>.json`), along with `oauth_application_id` and `location_is_exact`. It is slow, about 15 to 30 seconds a page. v2's `application.name` names the app; an observation with no application came from the website.
+
+The two fields say little. Only the old Android app writes them, and it writes `gps` whenever the latitude changes in its editor, including when the point came from a photo's EXIF or from the map ([`ObservationEditor.java`](https://github.com/inaturalist/iNaturalistAndroid/blob/main/iNaturalist/src/main/java/org/inaturalist/android/ObservationEditor.java)). The iOS apps, the new app and the web uploader leave them blank.
+
+**Missing `positional_accuracy`.** The server turns an accuracy of 0 into null (`nilify_positional_accuracy_if_zero` in `observation.rb`). The web uploader and the old Android app take a photo's accuracy only from its `GPSHPositioningError` EXIF tag, which iPhones write and most Android cameras and standalone GPS cameras don't, so a location read from such a photo has none. Old Android also clears the accuracy when it reads a photo's coordinates. Coordinates typed into the website have none either. The coordinates themselves show which of these happened: EXIF in degrees, minutes and seconds converts to decimals that end in repeated digits (`43.5312972222`), and typed ones have three or four decimal places.
+
+**Photo metadata** (camera make, model, EXIF GPS) shows only on the HTML page `https://www.inaturalist.org/photos/<id>`, which is behind a Cloudflare challenge that curl and headless Chromium don't pass. `/photos/<id>.json` answers "Not found", there is no photos route in either API, and the files on `inaturalist-open-data` have their EXIF stripped, the originals included. A signed-in browser can: through Claude in Chrome, `fetch('/photos/<id>')` from an iNaturalist tab returns the page with the signed-in session, and the `th`/`td` rows of its table are the metadata. Signed out, the page shows only copyright tags; signed in, it shows everything but serial numbers, and the GPS and date rows only when you may see the observation's true coordinates ([`photos_helper.rb`](https://github.com/inaturalist/inaturalist/blob/main/app/helpers/photos_helper.rb)).
+
+What the metadata showed (2026-11-10, 146 photos from Oregon Bee Atlas observations): photos uploaded by iNaturalist Classic (iOS) carry no EXIF at all, with or without an accuracy, so they can't tell you where the location came from. Android phone photos carry GPS but never `GPSHPositioningError`. Where an Android observation has no accuracy, 25 of 30 sit exactly on the photo's GPS point; where it has one, 6 of 14 do and the rest sit a few metres to 100 m away, from the phone's own location fix.
+
 ## Detecting a takedown
 
 What each kind looks like in the API, so a mirror can follow iNaturalist when it takes something down:
