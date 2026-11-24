@@ -14,6 +14,11 @@ longer topics sit in the skill's `references/` directory, linked from it.
   geoprivacy/trusted-access semantics as actually observed live, not as
   commonly assumed.
 
+- **[symbiota](symbiota/SKILL.md)** — Symbiota collections portals such as
+  Ecdysis: reading through the v2 API and downloads, what each upload route
+  does to records it matches, identifiers and the GUID source, and a harness for
+  testing an import on a local copy first.
+
 ## Install
 
 Copy (or symlink) a skill's directory into your agent's skills directory —
@@ -22,6 +27,7 @@ for Claude Code:
 ```bash
 git clone https://github.com/rainhead/skills
 ln -s "$PWD/skills/inaturalist" ~/.claude/skills/inaturalist
+ln -s "$PWD/skills/symbiota" ~/.claude/skills/symbiota
 ```
 
 ## Maintenance
