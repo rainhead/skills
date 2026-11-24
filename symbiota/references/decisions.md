@@ -53,7 +53,7 @@ Whichever you use, drop every record edited since your read: list the edits sinc
 
 **Route.** Two public calls, cheapest first ([reading](reading.md#counting-and-asking-what-changed)):
 1. The count of the collection, and the count modified since a day before your download, both with a far-future maximum. If both match your stored numbers, nothing moved, subject to the probe's blind spots.
-2. The edit feed from your read time (`fromDate`). It lists each edit with record, field, old and new value. Use it to exclude records from a file, and to see who changed what.
+2. The edit feed from your read time (`fromDate`). It lists each edit with record, field, old and new value. Use it to exclude records from a file, and to see what changed and when. It does not say who made an edit.
 
 Download again when either moves. The probe cannot see a second edit inside its window, nor a deletion compensated by an insertion.
 
