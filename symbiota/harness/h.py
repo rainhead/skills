@@ -78,6 +78,9 @@ def make_zip(path, core_cols, core_rows, ident_cols=None, ident_rows=None, id_co
         if ':' in c: return 'https://symbiota.org/terms/' + c
         return TERM + c
     def tsv(cols, rows):
+        for v in [c for c in cols] + [v for r in rows for v in r]:
+            if v is not None and any(ch in str(v) for ch in '\t\n\r'):
+                raise ValueError('value %r holds a tab or line break, which would break the tab-separated row' % (v,))
         return '\n'.join(['\t'.join(cols)] + ['\t'.join('' if v is None else str(v) for v in r) for r in rows]) + '\n'
     with zipfile.ZipFile(path, 'w') as z:
         z.writestr('meta.xml', meta())
@@ -124,7 +127,9 @@ def upload(label, collid, zippath, importident=True, matchcat=True, matchotherca
 
 def sql(q):
     p = subprocess.run([W + '/sql.sh', '-t', '-e', q], capture_output=True, text=True)
-    return (p.stdout + p.stderr).strip()
+    if p.returncode != 0:
+        raise RuntimeError('sql.sh failed (status %d): %s' % (p.returncode, p.stderr.strip()))
+    return p.stdout.strip()
 
 def dump(cats=None, label=''):
     where = ''
@@ -224,7 +229,14 @@ def import_ext(label, collid, importType, path, associationType='', relationship
 
 def snap(cat):
     out = sql("select * from omoccurrences where catalogNumber='%s'\\G" % cat)
-    return dict(l.strip().split(': ', 1) for l in out.split('\n') if ': ' in l)
+    # Split before trimming, so a field with an empty value (a line ending "key: ") keeps its key. The last line may have lost its trailing space, so also accept a line ending in a colon.
+    d = {}
+    for l in out.split('\n'):
+        if ': ' in l: k, v = l.split(': ', 1)
+        elif l.endswith(':'): k, v = l[:-1], ''
+        else: continue
+        d[k.strip()] = v
+    return d
 
 def diff(b, a, ignore=()):
     ch = ['%s: %s -> %s' % (k, b[k], a.get(k)) for k in b if b[k] != a.get(k) and k not in ignore]

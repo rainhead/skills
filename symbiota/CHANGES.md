@@ -14,7 +14,7 @@ Measured the same day on a second local Symbiota 3.4.17 (commit 4491b791c, PHP 8
 
 What changed in the skill: a full section on the editor's save in `writing.md`; the new section on the one-record import in `hazards.md`; what the edit feed holds and leaves out in `reading.md`; the editor's save as the first route for changing one field in `decisions.md`; the tests moved out of `not-tested.md` and the new gaps added; `SKILL.md` rule 1 and the gotchas made to agree.
 
-**The harness was fixed.** The first harness lacked the `pdo_mysql` extension and the API's `api/.env` settings, so the API's routes failed. The Dockerfile and `setup.sh` now add both ([local-test](references/local-test.md#reaching-the-api-locally)). That session made the same changes by hand. The changed harness was not run end to end.
+**The harness was fixed.** The first harness lacked the `pdo_mysql` extension and the API's `api/.env` settings, so the API's routes failed. The Dockerfile and `setup.sh` now add both ([local-test](references/local-test.md#reaching-the-api-locally)). That session made the same changes by hand. The changed harness was later run end to end (2026-11-23, observed): setup, one upload and one hash run all worked.
 
 **Disagreement with the earlier notes, and which the skill follows.** The notes of 2026-11-20 listed "driving the editor in bulk" and "whether an import appears in the edit feed" as untested. Both are now measured, and the skill follows the measurements. The earlier statement that no route protects a matched record except the skeletal one is true of the uploads only: the editor's save does.
 

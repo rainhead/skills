@@ -8,7 +8,7 @@ Open this when you need records, counts or change information out of a portal, o
 |---|---|---|
 | A count, or "has anything changed" | `api/v2/occurrence` with `limit=1`, read `count` | no |
 | A sweep of public fields | `api/v2/occurrence`, up to 300 a page | no |
-| Every field and the whole identification history | the signed-in download (`downloadhandler.php`) | yes |
+| Most fields and the whole identification history (not every record or stored field, see [what the download leaves out](#what-the-download-leaves-out)) | the signed-in download (`downloadhandler.php`) | yes |
 | A snapshot a collection publishes for aggregators | the collection's `dwcaUrl` | no |
 | Which records were edited, when, and what changed | `api/v2/occurrence/annotation` | no |
 | One record as a person sees it | `collections/individual/index.php?guid=<id>` | no |

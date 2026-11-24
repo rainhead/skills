@@ -5,7 +5,7 @@ Open this when you know what you want to happen to records on a portal and need 
 ## I want to read records
 
 - **A count, a sweep of public fields, or a check that something moved:** the v2 API, no sign-in ([reading](reading.md#the-public-v2-api)).
-- **Everything, with identification history:** the signed-in download. Repair the identification file's delimiter before you read or upload it ([reading](reading.md#the-identification-file-does-not-match-its-metaxml)).
+- **Most fields, with identification history:** the signed-in download. It is not complete: it can leave out cultivated records, records with record security 5, and stored fields such as `processingStatus` ([reading](reading.md#what-the-download-leaves-out)). Repair the identification file's delimiter before you read or upload it ([reading](reading.md#the-identification-file-does-not-match-its-metaxml)).
 - **What an aggregator sees:** the collection's published archive.
 
 ## I want to add new records
@@ -66,7 +66,7 @@ Whichever you use, drop every record edited since your read: list the edits sinc
 
 Download again when either moves. The probe cannot see a second edit inside its window, nor a deletion compensated by an insertion.
 
-**Caveats.** A rise in `dateLastModified` is not proof of a real change ([hazards](hazards.md#smaller-hazards)). The feed leaves out records with record security above 0, identifications, and uploads made without "Version data changes" ([reading](reading.md#the-edit-feed)).
+**Caveats.** A rise in `dateLastModified` is not proof of a real change ([hazards](hazards.md#smaller-hazards)). The feed leaves out records with record security above 0, identifications, and uploads made without "Version data changes" ([reading](reading.md#the-edit-feed)). A change to associations, whether an Extended Data Import or an association edited by hand, is not shown by either part of the probe: it moves neither `dateLastModified` nor the edit feed (not measured; the associations live in their own table, so this follows from the probe reading only the occurrence row and the feed). Associations also arrive only in a download that asks for them: the download form's "Include associations" checkbox is named `associations` with value 1, and the handler tests only that the key is present (source, `collections/download/index.php` line 213 and `downloadhandler.php` lines 188 to 189; not tried against a portal).
 
 ## I want to publish my own record identifier
 
