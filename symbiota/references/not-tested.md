@@ -4,7 +4,7 @@ Open this before relying on silence. Nothing here is evidence that something is 
 
 ## Never run
 
-- **Any Symbiota version other than 3.4.17.** The schema was 3.0 plus patches 3.1 to 3.4 (two benign errors appeared in the patches). Line numbers in this skill are for commit 4491b791c.
+- **Any Symbiota version other than 3.4.17.** The schema was 3.0 plus patches 3.1 to 3.4 (three errors appeared, all "Table ... doesn't exist" in patches 3.1 and 3.2). Line numbers in this skill are for commit 4491b791c.
 - **MySQL.** Only MariaDB 10.11 was used. Matching and collations were read as the same, which is not the same as run.
 - **PHP other than 8.2.**
 - **Snapshot and Aggregate collections.** What an import does to them (matching on `dbpk`, replacing the collection) is read in the source and was never run. Every measurement used Live Data.

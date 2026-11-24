@@ -29,7 +29,7 @@ Matching on `otherCatalogNumbers` is a second switch. It is exact text equality,
 
 ## Before the transfer
 
-**Nothing is written to the collection until you press "Transfer Records to Central Specimen Table".** "Start Upload" only stages rows in two working tables. Stopping at the report changed nothing in the collection, so it is a dry run (measured 2026-11-20 and again 2026-11-21 against 9,452 real-shaped records, hashed before and after).
+**On the portal's pages, nothing is written to the collection until you press "Transfer Records to Central Specimen Table".** "Start Upload" only stages rows in two working tables. The exception is the scheduled command-line import ([below](#a-scheduled-fetch-from-a-url)), which has no report and no pause and transfers in the same run. Stopping at the report changed nothing in the collection, so it is a dry run (measured 2026-11-20 and again 2026-11-21 against 9,452 real-shaped records, hashed before and after).
 
 The report reads "Occurrences pending transfer: N", "Records to be updated: N" with "Caution: incoming records will replace existing records" when N is not zero, "New records: N", and "Identification history count: M". The text is identical for a file that changes nothing and a file that changes many records (measured 2026-11-23): it counts, it does not list. For a new-records-only file the report must read "Records to be updated: 0" and "New records" equal to the number of rows you meant to add.
 
@@ -52,8 +52,7 @@ Page settings that matter: "Match on Catalog Number", "Import Identification His
 2. SUB `cleanUpload` (593) matches staged rows to records (612 to 625 for a Live Data collection).
 3. SUB `transferOccurrences` (955) updates every matched record with **all** columns that exist both in the staging table and in `omoccurrences` (976 to 989, `o.field = u.field`), then inserts the unmatched rows (1021). The only columns left out are `dbpk`, `observeruid`, `dateentered`, `initialtimestamp`, `occid` and `collid` (SUB `getTransferFieldArr`, 1159 to 1187).
 4. SUB `transferIdentificationHistory` (1385 to 1442) adds identification rows.
-
-Cleanup steps then also write records that are not in the file: in the round-trip test a record the file lacked still got `continent` and `tidInterpreted` filled (measured 2026-11-23).
+5. After the transfer, `finalCleanup` runs, whether or not a record matched. It also writes records that are not in the file: in the round-trip test a record the file lacked still got `continent` and `tidInterpreted` filled (measured 2026-11-23). The full list of its steps and what is known about each is in [hazards](hazards.md#what-runs-on-every-transfer).
 
 **What the identification extension supplies, measured 2026-11-20.** Stored on the identification: `scientificName` (as `sciname`), `scientificNameAuthorship`, `identificationQualifier`, `identifiedBy`, `dateIdentified`, `identificationIsCurrent`, `identificationReferences`, `identificationRemarks`, `sourceIdentifier`. Read and then dropped: `verbatimIdentification`, `taxonRank`, `taxonRemarks`, `identificationVerificationStatus`. Not offered as a target at all: `identifiedByID`, `sex`, `caste`, `reproductiveCondition`. A row with no `scientificName` is skipped (SUB 2135 to 2140). Sex is read from the occurrence row only, and there is no caste column anywhere in the schema, so a project that needs caste has to keep it in a free column such as `reproductiveCondition`.
 

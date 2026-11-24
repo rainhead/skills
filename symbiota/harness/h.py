@@ -8,10 +8,23 @@ W = os.environ.get('SYMTEST_DIR', os.path.dirname(os.path.abspath(__file__)))
 B = os.environ.get('SYMTEST_URL', 'http://127.0.0.1:18181/sym')
 S = requests.Session()
 LOGDIR = W + '/logs'
+os.makedirs(LOGDIR, exist_ok=True)
 TERM = 'http://rs.tdwg.org/dwc/terms/'
 
+def post(url, **kw):
+    """POST with the session and raise on an HTTP error, so that a failed request cannot pass for an empty page."""
+    r = S.post(url, **kw)
+    if r.status_code >= 400:
+        raise RuntimeError('POST %s answered HTTP %d' % (url, r.status_code))
+    return r
+
 def login():
-    S.post(B + '/profile/index.php', data={'login': 'admin', 'password': 'admin', 'action': 'login'}, allow_redirects=False)
+    """Sign in as the baseline's administrator. Raises unless the portal answered 200 or 302 and set a session cookie."""
+    r = S.post(B + '/profile/index.php', data={'login': 'admin', 'password': 'admin', 'action': 'login'}, allow_redirects=False)
+    if r.status_code not in (200, 302):
+        raise RuntimeError('login: the portal answered HTTP %d' % r.status_code)
+    if not any(c.name == 'PHPSESSID' for c in S.cookies):
+        raise RuntimeError('login: the portal set no session cookie')
 
 def text(h):
     h = re.sub(r'<script.*?</script>', '', h, flags=re.S)
@@ -92,13 +105,13 @@ def upload(label, collid, zippath, importident=True, matchcat=True, matchotherca
     """Drive specuploadmap.php (analyze) -> specuploadprocessor.php (Start Upload) -> final transfer.
     dry=True stops at the Pending Data Transfer Report: nothing is written to the collection, the upload stays staged."""
     with open(zippath, 'rb') as f:
-        r = S.post(B + '/collections/admin/specuploadmap.php',
+        r = post(B + '/collections/admin/specuploadmap.php',
                    data={'collid': collid, 'uploadtype': uploadtype, 'uspid': 0, 'automap': 1, 'action': 'Analyze File', 'MAX_FILE_SIZE': 100000000},
                    files={'uploadfile': ('dwca.zip', f, 'application/zip')})
     open('%s/%s.1-analyze.html' % (LOGDIR, label), 'w').write(r.text)
     fields = form_fields(r.text, 'dwcauploadform')
     if fields is None:
-        print('ANALYZE FAILED:', text(r.text)[-600:]); return None
+        raise RuntimeError('ANALYZE FAILED: ' + text(r.text)[-600:])
     fields = [(k, v) for k, v in fields if k not in ('matchcatnum', 'matchothercatnum', 'importident')]
     if mapfix: fields = mapfix(fields)
     if importident: fields.append(('importident', '1'))
@@ -106,45 +119,58 @@ def upload(label, collid, zippath, importident=True, matchcat=True, matchotherca
     if matchothercat: fields.append(('matchothercatnum', '1'))
     if versiondata: fields.append(('versiondata', '1'))
     fields.append(('action', 'Start Upload'))
-    r2 = S.post(B + '/collections/admin/specuploadprocessor.php', data=fields)
+    r2 = post(B + '/collections/admin/specuploadprocessor.php', data=fields)
     open('%s/%s.2-start.html' % (LOGDIR, label), 'w').write(r2.text)
     t2 = text(r2.text)
     ff = form_fields(r2.text, 'finaltransferform')
     out = '== START UPLOAD\n' + t2[t2.find('Upload Status'):]
-    if ff is None:
-        print(out[-1500:]); return out
     if dry:
         print(out[-1500:]); return out
+    if ff is None:
+        raise RuntimeError('no transfer form after Start Upload, so nothing was transferred. The page said: ' + out[-1500:])
     ff = [(k, v) for k, v in ff] + [('action', 'activateOccurrences')]
-    r3 = S.post(B + '/collections/admin/specuploadprocessor.php', data=ff)
+    r3 = post(B + '/collections/admin/specuploadprocessor.php', data=ff)
     open('%s/%s.3-final.html' % (LOGDIR, label), 'w').write(r3.text)
     t3 = text(r3.text)
     out += '\n== FINAL TRANSFER\n' + t3[t3.find('Starting Stage'):] if 'Starting Stage' in t3 else '\n== FINAL TRANSFER (raw)\n' + t3[-2000:]
     open('%s/%s.txt' % (LOGDIR, label), 'w').write(out)
+    if 'Upload Procedure Complete' not in t3:
+        raise RuntimeError('the transfer page did not end with "Upload Procedure Complete", so the transfer may not have finished. It said: ' + t3[-1500:])
     keep=[l for l in out.split('\n') if re.search(r'to be updated|New records|Identification|identification|FAILED|ERROR|WARNING|loaded|updated|inserted|Pending|matching|Matching|Remove', l)]
     print('[upload %s]' % label, ' | '.join(keep))
     return out
 
-def sql(q):
-    p = subprocess.run([W + '/sql.sh', '-t', '-e', q], capture_output=True, text=True)
+def sql(q, args=('-t',)):
+    p = subprocess.run([W + '/sql.sh', *args, '-e', q], capture_output=True, text=True)
     if p.returncode != 0:
         raise RuntimeError('sql.sh failed (status %d): %s' % (p.returncode, p.stderr.strip()))
     return p.stdout.strip()
 
+def lit(v):
+    """The one encoder for a value in a SQL string literal (MariaDB with the default backslash escapes): backslash and quote doubled, a NUL byte refused."""
+    v = str(v)
+    if '\0' in v:
+        raise ValueError('a NUL byte cannot go in a SQL literal: %r' % v)
+    return "'" + v.replace('\\', '\\\\').replace("'", "''") + "'"
+
+def lits(vs):
+    return ','.join(lit(v) for v in vs)
+
 def dump(cats=None, label=''):
+    if cats is not None and not list(cats): raise ValueError('dump(): an empty list of catalog numbers; pass None for every record')
     where = ''
-    if cats: where = ' WHERE catalogNumber IN (%s)' % ','.join("'%s'" % c for c in cats)
+    if cats is not None: where = ' WHERE catalogNumber IN (%s)' % lits(cats)
     print('--- %s occurrences' % label)
     print(sql("SELECT occid, catalogNumber cat, dbpk, sciname, identifiedBy idby, dateIdentified di, scientificNameAuthorship auth, identificationQualifier q, sex, reproductiveCondition repro, disposition, locality, dateLastModified dlm FROM omoccurrences%s ORDER BY occid" % where))
     print('--- %s determinations' % label)
     w2 = ''
-    if cats: w2 = ' WHERE o.catalogNumber IN (%s)' % ','.join("'%s'" % c for c in cats)
+    if cats is not None: w2 = ' WHERE o.catalogNumber IN (%s)' % lits(cats)
     print(sql("SELECT d.detid, o.catalogNumber cat, d.sciname, d.identifiedBy idby, d.dateIdentified di, d.isCurrent cur, d.scientificNameAuthorship auth, d.identificationQualifier q, d.verbatimIdentification vi, d.taxonRank rk, d.identifiedByID byid, d.identificationRemarks rem, d.sortSequence srt, d.sourceIdentifier src FROM omoccurdeterminations d JOIN omoccurrences o USING(occid)%s ORDER BY o.occid, d.detid" % w2))
 
 def editor_add(collid, **f):
     d = {'collid': collid, 'submitaction': 'addOccurRecord'}
     d.update(f)
-    r = S.post(B + '/collections/editor/occurrenceeditor.php', data=d)
+    r = post(B + '/collections/editor/occurrenceeditor.php', data=d)
     open(LOGDIR + '/editor_add.html', 'w').write(r.text)
     return r
 
@@ -152,7 +178,7 @@ def editor_det(collid, occid, **f):
     d = {'collid': collid, 'occid': occid, 'submitaction': 'submitDetermination', 'makecurrent': 1, 'tidtoadd': '', 'scientificnameauthorship': '',
          'identificationqualifier': '', 'identificationreferences': '', 'identificationremarks': '', 'confidenceranking': ''}
     d.update(f)
-    r = S.post(B + '/collections/editor/occurrenceeditor.php', data=d)
+    r = post(B + '/collections/editor/occurrenceeditor.php', data=d)
     open(LOGDIR + '/editor_det.html', 'w').write(r.text)
     return r
 
@@ -160,12 +186,13 @@ if __name__ == '__main__':
     login()
 
 def set_map(fields, prefix, source, target):
-    """Set the target select that follows source sf field (as a user would pick in the mapping form)."""
-    out = []; want = False
+    """Set the target select that follows source sf field (as a user would pick in the mapping form). Raises when the form has no such source column, so a mapping that was not applied cannot pass for one that was."""
+    out = []; want = False; done = False
     for k, v in fields:
         if k == prefix + 'sf[]' and v == source.lower(): want = True
-        elif k == prefix + 'tf[]' and want: v = target; want = False
+        elif k == prefix + 'tf[]' and want: v = target; want = False; done = True
         out.append((k, v))
+    if not done: raise ValueError('set_map: no %ssf[] field for %r with a following %stf[] in the form' % (prefix, source, prefix))
     return out
 
 def ident_options(label):
@@ -177,13 +204,13 @@ def ident_options(label):
 def upload_csv(label, collid, path, matchcat=True, matchothercat=False, versiondata=False, uploadtype=3, setfields=None, quiet=False):
     """Plain spreadsheet (csv) upload: specuploadmap.php (analyze, automap) -> specuploadprocessor.php, then final transfer."""
     with open(path, 'rb') as f:
-        r = S.post(B + '/collections/admin/specuploadmap.php',
+        r = post(B + '/collections/admin/specuploadmap.php',
                    data={'collid': collid, 'uploadtype': uploadtype, 'uspid': 0, 'automap': 1, 'action': 'Analyze File', 'MAX_FILE_SIZE': 100000000},
                    files={'uploadfile': (os.path.basename(path), f, 'text/csv')})
     open('%s/%s.1-analyze.html' % (LOGDIR, label), 'w').write(r.text)
     fields = form_fields(r.text, 'filemappingform')
     if fields is None:
-        print('ANALYZE FAILED:', text(r.text)[-800:]); return None
+        raise RuntimeError('ANALYZE FAILED: ' + text(r.text)[-800:])
     fields = [(k, v) for k, v in fields if k not in ('matchcatnum', 'matchothercatnum', 'versiondata')]
     if matchcat: fields.append(('matchcatnum', '1'))
     if matchothercat: fields.append(('matchothercatnum', '1'))
@@ -191,14 +218,16 @@ def upload_csv(label, collid, path, matchcat=True, matchothercat=False, versiond
     if setfields:
         fields = [(k, v) for k, v in fields if k not in setfields] + list(setfields.items())
     fields.append(('action', 'Start Upload'))
-    r2 = S.post(B + '/collections/admin/specuploadprocessor.php', data=fields)
+    r2 = post(B + '/collections/admin/specuploadprocessor.php', data=fields)
     open('%s/%s.2-start.html' % (LOGDIR, label), 'w').write(r2.text)
     ff = form_fields(r2.text, 'finaltransferform')
     if ff is None:
-        print('NO FINAL FORM', text(r2.text)[-1500:]); return text(r2.text)
-    r3 = S.post(B + '/collections/admin/specuploadprocessor.php', data=ff + [('action', 'activateOccurrences')])
+        raise RuntimeError('NO FINAL FORM, so nothing was transferred. The page said: ' + text(r2.text)[-1500:])
+    r3 = post(B + '/collections/admin/specuploadprocessor.php', data=ff + [('action', 'activateOccurrences')])
     out = text(r2.text) + '\n==FINAL\n' + text(r3.text)
     open('%s/%s.txt' % (LOGDIR, label), 'w').write(out)
+    if 'Upload Procedure Complete' not in text(r3.text):
+        raise RuntimeError('the transfer page did not end with "Upload Procedure Complete", so the transfer may not have finished. It said: ' + text(r3.text)[-1500:])
     keep=[l for l in out.split('\n') if re.search(r'to be updated|New records|FAILED|ERROR|WARNING|loaded|updated|inserted|Pending|matching|Matching', l)]
     print('[csv upload %s]' % label, ' | '.join(keep))
     return out
@@ -206,13 +235,13 @@ def upload_csv(label, collid, path, matchcat=True, matchothercat=False, versiond
 def import_ext(label, collid, importType, path, associationType='', relationship='', subtype='', replace=False, createnew=False, extra=None):
     """Symbiota's 'Import extended data' page (collections/admin/importextended.php)."""
     with open(path, 'rb') as f:
-        r = S.post(B + '/collections/admin/importextended.php',
+        r = post(B + '/collections/admin/importextended.php',
                    data={'collid': collid, 'importType': importType, 'associationType': associationType, 'submitAction': 'initiateImport', 'MAX_FILE_SIZE': 10000000},
                    files={'importFile': (os.path.basename(path), f, 'text/csv')})
     open('%s/%s.1.html' % (LOGDIR, label), 'w').write(r.text)
     fields = form_fields(r.text, 'mappingform')
     if fields is None:
-        print('IMPORT-EXT INIT FAILED:', text(r.text)[-800:]); return None
+        raise RuntimeError('IMPORT-EXT INIT FAILED: ' + text(r.text)[-800:])
     fields = [(k, v) for k, v in fields if k not in ('relationship', 'subType', 'replace', 'createNew')]
     if relationship: fields.append(('relationship', relationship))
     if subtype: fields.append(('subType', subtype))
@@ -220,24 +249,33 @@ def import_ext(label, collid, importType, path, associationType='', relationship
     if createnew: fields.append(('createNew', '1'))
     if extra: fields += extra
     fields.append(('submitAction', 'importData'))
-    r2 = S.post(B + '/collections/admin/importextended.php', data=fields)
+    r2 = post(B + '/collections/admin/importextended.php', data=fields)
     out = text(r2.text); i = out.find('Action Panel'); 
     open('%s/%s.txt' % (LOGDIR, label), 'w').write(out)
     print('[import-ext %s]' % label, ' | '.join(l for l in out[i if i>=0 else 0:].split('\n')[:25] if 'footer' not in l.lower() and 'NSF' not in l and 'Symbiota' not in l))
     return out
 
 
+ABSENT = '<absent>'
+
 def snap(cat):
-    out = sql("select * from omoccurrences where catalogNumber='%s'\\G" % cat)
-    # Split before trimming, so a field with an empty value (a line ending "key: ") keeps its key. The last line may have lost its trailing space, so also accept a line ending in a colon.
-    d = {}
-    for l in out.split('\n'):
-        if ': ' in l: k, v = l.split(': ', 1)
-        elif l.endswith(':'): k, v = l[:-1], ''
-        else: continue
-        d[k.strip()] = v
-    return d
+    """Every column of the one occurrence row with this catalog number, as a dict. An empty dict means no such record. Raises when two or more rows share the catalog number, because merging them would hide changes."""
+    cols = sql("select column_name from information_schema.columns where table_schema='symbdb' and table_name='omoccurrences' order by ordinal_position", args=('-N', '-B')).split('\n')
+    if not cols or cols == ['']: raise RuntimeError('snap(): could not read the omoccurrences columns')
+    pairs = ','.join("%s,`%s`" % (lit(c), c) for c in cols)
+    # json_object keeps NULL (null) apart from an empty string, and -r with one JSON document per row keeps a value with a line break on one line.
+    out = sql("select json_object(%s) from omoccurrences where catalogNumber=%s order by occid" % (pairs, lit(cat)), args=('-N', '-B', '-r'))
+    rows = [json.loads(l) for l in out.split('\n') if l.strip()]
+    if len(rows) > 1:
+        raise RuntimeError('snap(): %d records share catalog number %r (occid %s)' % (len(rows), cat, ', '.join(str(r['occid']) for r in rows)))
+    return rows[0] if rows else {}
 
 def diff(b, a, ignore=()):
-    ch = ['%s: %s -> %s' % (k, b[k], a.get(k)) for k in b if b[k] != a.get(k) and k not in ignore]
+    """The fields that differ between two snapshots, over the union of their keys. A key missing from one snapshot (a record that did not exist, or a column added) is shown as <absent>, which differs from an empty value or NULL."""
+    ch = []
+    for k in sorted(set(b) | set(a)):
+        if k in ignore: continue
+        bv = b.get(k, ABSENT); av = a.get(k, ABSENT)
+        if bv != av or (k in b) != (k in a):
+            ch.append('%s: %s -> %s' % (k, bv, av))
     return ch

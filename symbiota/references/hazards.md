@@ -32,7 +32,7 @@ Measured 2026-11-20 on a record made through the editor (current name A by one p
 
 Why: the record's columns come from the core row (SUB 987), identification rows are inserted with their own flag copied and no other row is cleared (SUB 1426 to 1434). The portal's editor clears the old flag (`OccurrenceEditorDeterminations.php` 133 to 140). The importer does not.
 
-**What to do.** Keep the record's name out of a file for existing records, or build the file from a read taken moments earlier, and send every identification so that each differs in name, determiner or date from the others. A volunteer's identification sent as not current to a record with no other one leaves the record with no name.
+**What to do.** Do not send a file for existing records at all: the table above shows that a row with no name, and a not-current identification, empties the existing record's name, determiner and date, so leaving the name out does not preserve it. If you must, send a complete current row for every record, with the name, determiner and date taken from a read made moments earlier, and send identifications that each differ in name, determiner or date from the others. A volunteer's identification sent as not current to a record with no other one leaves the record with no name.
 
 ## Spreadsheet uploads rewrite the current identification
 
@@ -61,9 +61,23 @@ The tempting method is to download a collection, change some cells, and upload t
 
 **The pre-transfer report cannot tell you.** It reads the same for an unchanged file and a file with changes (measured 2026-11-23).
 
+## What runs on every transfer
+
+**The file's own rows are not the only thing a transfer writes.** After the rows are written, the transfer ends with `finalCleanup` (source, `SpecUploadBase.php` 1811 to 1875, called from `SpecUploadDwca.php` 723 and 940, `SpecUploadBase.php` 908 and `SpecUploadFile.php` 221, which are the archive, base and delimited-file transfers). It runs whether or not any record matched, so a file of only new records runs it too. In order:
+- **Staging.** It sets the collection's `uploaddate` and deletes the collection's staged rows, and also deletes staged rows of any collection that are older than three days (measured 2026-11-21).
+- **Temporary row ids.** It clears `dbpk` values that start with `SYMBDBPK-` in the collection.
+- **General cleaning** (`OccurrenceMaintenance::generalOccurrenceCleaning`, source, `OccurrenceMaintenance.php` 31 and following). Most steps are limited to the collection: the taxon index (`tidInterpreted`), `family` and `sciname` fills, dates. The two steps that fill `countryCode` and `continent` have their collection filter commented out (lines 172 and 195), so they run over every collection of the portal.
+- **Record security.** `protectRareSpecies` (482 and following) sets `recordSecurity` to 1 on records of a taxon the thesaurus marks sensitive when `securityReason` is empty, in the collection only.
+- **Statistics.** `updateCollectionStatsFull` (599 and following) recomputes the collection's counts and stored statistics text.
+- **Record UUIDs.** `populateGuids` fills `recordID` where it is empty. The call passes the collection, but the method takes no argument and `GuidManager::$collid` stays 0, so it covers every collection of the portal (source, `GuidManager.php` 39 and 64 to 65).
+
+**What was measured.** With a file of only new records, a collection of 9,452 copied real records that had itself been loaded through these pages came out byte for byte identical, rows and identifications, after 8,085 new records were added (hashes, 2026-11-21). With a one-record file against a collection that had deliberate gaps, 15 other records changed ([next section](#an-import-of-one-record-changes-other-records-and-the-matched-one), 2026-11-23). Both fit the source: the cleanup changes a record only where it finds a gap, and the first collection had none. That is an inference. No new-records-only file was run against a collection with gaps, and a real portal's records may have them (a record of a sensitive taxon at security 0, a name the thesaurus lacked, a blank `recordID`).
+
+**So promise only this:** the file does not overwrite existing records, and the cleanup that follows can still fill or set values on other records, in other collections for `recordID`, `countryCode` and `continent`. The edit history does not show it ([below](#an-import-of-one-record-changes-other-records-and-the-matched-one)). Compare a copy of the portal's records before and after on a local Symbiota ([local-test](local-test.md)) when the difference matters.
+
 ## An import of one record changes other records and the matched one
 
-The belief that an import writes only the records in the file is wrong. Measured 2026-11-23, with a file of one row (the portal's own downloaded row for one record, its locality changed), "Match on Catalog Number" ticked, identification history unticked, imported by the superuser into a collection of 300 records plus 9 probe records with deliberate gaps. Sixteen records changed, only one of them in the file.
+The belief that an import writes only the records in the file is wrong, because of the cleanup above. Measured 2026-11-23, with a file of one row (the portal's own downloaded row for one record, its locality changed), "Match on Catalog Number" ticked, identification history unticked, imported by the superuser into a collection of 300 records plus 9 probe records with deliberate gaps. Sixteen records changed, only one of them in the file.
 
 **Other records, in the collection imported into:**
 - **`recordSecurity` went from 0 to 1 on every record of a sensitive taxon** (the thesaurus marks the taxon, 8 records), and `securityReason` stayed empty on them. A record already at 1 stayed. A record of the same taxon in another collection did not change.
@@ -96,7 +110,7 @@ The belief that an import writes only the records in the file is wrong. Measured
 | `dateLastModified` | A changed record moves to the current time and its neighbours do not. Whether an **unchanged** re-upload moves it differs between runs. It did not in the first 2026-11-20 test, where the archive had no geography to refill. It moved every record in Beeline's synthetic test of the same day, where the update blanked `countryCode` and `continent` and then filled them again, and the blanking counts as a change. It moved all 9,452 records on 2026-11-23, where the update blanked `tidInterpreted` and the thesaurus step filled it again (read in the database's general log). A real change and a bump cannot be told apart by this column alone. | measured; source `db_schema-3.0.sql` 2231 (`ON UPDATE current_timestamp()`) |
 | `dateEntered` against `dateLastModified` | `dateEntered` is written in the web server's time zone and `dateLastModified` in the database's. They differed by seven hours in the test because PHP's time zone setting was empty. | measured 2026-11-20; SUB 1022 uses PHP `date()` |
 | A name the thesaurus lacks | `tidInterpreted` ends empty | measured 2026-11-23 |
-| Cleanup steps | Write records that are not in the file: `continent` and `tidInterpreted` appeared on a record the file did not contain | measured 2026-11-23 |
+| Cleanup steps | Run after every transfer and write records that are not in the file: `continent` and `tidInterpreted` appeared on a record the file did not contain ([what runs](#what-runs-on-every-transfer)) | measured 2026-11-23; source `SpecUploadBase.php` 1811 to 1875 |
 | An edit history | Field-level for occurrence columns only, and only with "Version data changes" ticked, and only for the matched record's changed fields ([above](#an-import-of-one-record-changes-other-records-and-the-matched-one)). Identification rewrites are never versioned. | measured 2026-11-20 and 2026-11-23 |
 | Staged upload | Replaced by the next upload to the collection. The transfer writes whatever is staged. Rows older than 3 days are purged. | [writing](writing.md#before-the-transfer) |
 | Same catalog number twice | See [identity](identity.md#duplicates) | measured 2026-11-20 |

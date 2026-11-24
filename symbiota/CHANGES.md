@@ -1,5 +1,27 @@
 # Verification history
 
+## 2026-11-23, second round of review fixes
+
+The first round's fixes were narrow, so this round fixed the class of mistake in each file and not only the cited line. Two classes, one for the harness and one for the prose.
+
+**Harness: a failure or an ambiguity passed as success or as "unchanged".**
+- `setup.sh` now stops on every failed required step: `docker compose` (its output goes to `logs/compose.log` and not through a pipe), the wait for the database, a new wait for the web service, each schema file, the sign-in and the collection request. The known benign patch errors ("Table ... doesn't exist" in patches 3.1 and 3.2) are tolerated and printed separately, and any other error stops it. It exits 0 only when a `TEST` collection with the asked-for GUID source is in the database, and refuses a database that already holds tables. The schema files run inside the container from the schema folder, because the baseline reads other files by relative path.
+- `lib.sh`: `login` returns non-zero unless the portal answers 200 or 302 and sets a session cookie. `SYMTEST_PREFIX` and `SYMTEST_PORT` (also read by `sql.sh` and `docker-compose.yml`) let a second copy run with names of its own.
+- `h.py`: one encoder (`lit`) for every SQL string, so a catalog number with an apostrophe or backslash works. `snap` reads every column as JSON (null kept apart from an empty string, line breaks kept) and raises when two records share the catalog number. `diff` compares the union of both snapshots' columns and shows `<absent>`, so a new record shows. `login`, the upload helpers and `set_map` raise on a failure (HTTP error, no analyze form, no transfer form, a transfer page without "Upload Procedure Complete", a mapping that matched no column) where they used to print and return.
+- `hashes.sh` was already strict and is unchanged.
+
+**Run end to end** (observed 2026-11-23, own folder under `/var/tmp`, containers and port of its own, removed afterwards): setup ended with the `TEST` collection and a second setup on the same database exited 1; a one-field change through the upload pages showed exactly `locality: Salem -> Eugene` in `diff()`; a new record showed all 117 columns as `<absent> -> value`; `O'BRIEN-1` and `B\S-2` were read back; two records sharing `DUP-1` raised from `snap`; `hashes.sh` printed counts and digests, and exited 1 with no digest when the database was stopped. A second `setup.sh` with a port already in use exited 1 at the compose step.
+
+**Prose: one part said what another contradicted, or stated an inference as a fact.**
+- A file of new catalog numbers "changes nothing else" was replaced everywhere (`SKILL.md` rule 2, gotcha 19, `decisions.md`, `hazards.md`) by what was measured: the file overwrites no existing record. The transfer's `finalCleanup` runs after every transfer, matched or not (source, `SpecUploadBase.php` 1811 to 1875), and the new section "What runs on every transfer" in `hazards.md` lists its steps with their scope, from the source and from the 2026-11-21 rehearsal (no existing record changed) and the 2026-11-23 one-record import (15 others changed). The reconciling reading, that the cleanup changes only where it finds a gap, is marked as an inference.
+- "Nothing is written until the transfer" now carries its exception (the scheduled import has no report and no pause) in `SKILL.md` rule 3 and `writing.md`.
+- `hazards.md` no longer recommends leaving the name out of a file for existing records, which the table above it shows empties the name.
+- `decisions.md`: the new-records route now says to press "Transfer Records to Central Specimen Table" once the checks pass; the one-field route now says what the edit feed cannot see and to probe the counts again, and download again if they moved, just before writing.
+- `reading.md`: the change probe's stored baseline and the later probe use the same lower bound, the stored `since` (a day before the request that fetched the file you hold), checked against Beeline's `ProbeBaseline` in `src/fetch-ecdysis.ts` and the beeatlas ADR 0023. `ecdysis.md` and `decisions.md` say the same.
+- A published `occurrenceID` equal to `recordID` does not identify the GUID source (`identity.md`), and Washington's setting is now marked as not known, with what the inference rests on and a request to confirm it with the collection's administrator (`ecdysis.md`).
+
+Extra fixes found on the reread are listed in the commit message.
+
 ## 2026-11-23, later: the record editor's save, and four checks of the bulk import
 
 Measured the same day on a second local Symbiota 3.4.17 (commit 4491b791c, PHP 8.2, MariaDB 10.11) built from the harness in [harness/](harness/). Invented data only, and nothing real was touched: 300 records in one Live Data collection, 20 in another, 9 probe records with deliberate gaps, and users with each role. Each trial started from a restored dump, and every table was compared by primary key afterwards.
@@ -55,7 +77,7 @@ I sent one request more than I needed to the home page (once to read it, once to
 
 ### Reproduced on a fresh local Symbiota
 
-The harness in [harness/](harness/), copied from the earlier sessions' scripts and made generic, was run from a scratch folder: PHP 8.2 image built, MariaDB 10.11 started, schema 3.0 and patches 3.1 to 3.4 installed (zero, one, two, zero, zero errors per patch file), one Live Data collection with GUID source `catalogNumber` created through the real metadata page.
+The harness in [harness/](harness/), copied from the earlier sessions' scripts and made generic, was run from a scratch folder: PHP 8.2 image built, MariaDB 10.11 started, schema 3.0 and patches 3.1 to 3.4 installed (zero, one, two, zero, zero errors per patch file, all of them "Table ... doesn't exist"), one Live Data collection with GUID source `catalogNumber` created through the real metadata page.
 
 | Test | Result |
 |---|---|

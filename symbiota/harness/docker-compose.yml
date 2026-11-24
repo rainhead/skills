@@ -1,8 +1,8 @@
-name: symtest
+name: ${SYMTEST_PREFIX:-symtest}
 services:
   symtest-db:
     image: mariadb:10.11
-    container_name: symtest-db
+    container_name: ${SYMTEST_PREFIX:-symtest}-db
     environment:
       MARIADB_ROOT_PASSWORD: rootpw
       MARIADB_DATABASE: symbdb
@@ -10,20 +10,20 @@ services:
       MARIADB_PASSWORD: symbpw
     command: --character-set-server=utf8mb3 --collation-server=utf8mb3_general_ci --sql-mode=
     volumes:
-      - symtest-dbdata:/var/lib/mysql
+      - dbdata:/var/lib/mysql
   symtest-web:
     build: .
-    image: symtest-web
-    container_name: symtest-web
+    image: ${SYMTEST_PREFIX:-symtest}-web
+    container_name: ${SYMTEST_PREFIX:-symtest}-web
     depends_on: [symtest-db]
-    ports: ["127.0.0.1:18181:80"]
+    ports: ["127.0.0.1:${SYMTEST_PORT:-18181}:80"]
     volumes:
       - ./src:/var/www/html
   symtest-files:
     image: nginx:alpine
-    container_name: symtest-files
+    container_name: ${SYMTEST_PREFIX:-symtest}-files
     volumes:
       - ./serve:/usr/share/nginx/html:ro
 volumes:
-  symtest-dbdata:
-    name: symtest-dbdata
+  dbdata:
+    name: ${SYMTEST_PREFIX:-symtest}-dbdata
