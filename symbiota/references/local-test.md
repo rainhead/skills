@@ -10,10 +10,14 @@ You need Docker, `rsync`, `curl` and Python 3 with `requests`, and a checkout of
 
 1. Copy the [harness/](../harness/) folder out of this skill to a folder of your own outside any repository. It writes a `src/` copy of Symbiota, a database volume, logs and a cookie jar beside it.
 2. Run `SYMBIOTA_SRC=<path to the Symbiota checkout> ./setup.sh [catalogNumber|symbiotaUUID|occurrenceId]`. The argument is the new collection's GUID source: use the portal's own ([identity](identity.md#what-the-guid-source-setting-decides)).
-3. It builds a PHP 8.2 with Apache image, starts MariaDB 10.11 (`utf8mb3`, `sql-mode` empty, as Symbiota expects) and an nginx container that serves a folder `serve/` on the compose network (so a scheduled import can fetch a URL), installs the schema 3.0 and the patches 3.1 to 3.4, signs in as the baseline's own administrator (`admin` with the password `admin`; a throwaway login, on 127.0.0.1 only) and creates one empty Live Data collection called `TEST`. The site is at `http://127.0.0.1:18181/sym/`.
+3. It builds a PHP 8.2 with Apache image (with the `pdo_mysql` extension, which the API needs), starts MariaDB 10.11 (`utf8mb3`, `sql-mode` empty, as Symbiota expects) and an nginx container that serves a folder `serve/` on the compose network (so a scheduled import can fetch a URL), installs the schema 3.0 and the patches 3.1 to 3.4, signs in as the baseline's own administrator (`admin` with the password `admin`; a throwaway login, on 127.0.0.1 only) and creates one empty Live Data collection called `TEST`. The site is at `http://127.0.0.1:18181/sym/`.
 4. The installer prints one line per patch file: the number of errors (zero, one, two, zero, zero on the last run; the notes record two benign errors from ALTERs on tables the baseline lacks).
 
 Setup took a few minutes the first time because it builds the PHP image. A fresh run of the harness on 2026-11-23 stood up the collection and completed an archive upload, a dry run, an absent-column upload and an unticked-match upload ([CHANGES.md](../CHANGES.md)).
+
+## Reaching the API locally
+
+Symbiota's Laravel API needs two things the first version of the harness lacked: the `pdo_mysql` PHP extension, and a settings file `api/.env` with the database host and login. Without them its routes fail, so the read routes such as the edit feed could not be tried. The Dockerfile now adds the extension and `setup.sh` writes `api/.env` from `api/.env.example` with the harness's database settings. The 2026-11-23 editor session made the same two changes by hand and measured with them. The changed harness files were not run end to end. **Locally the API answers under `/sym/api/index.php/v2/...`**, for example `http://127.0.0.1:18181/sym/api/index.php/v2/occurrence/annotation?collid=1&type=internal`. Write routes also need an `apiToken` and were not run.
 
 ## Drive the real pages
 

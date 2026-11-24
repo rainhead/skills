@@ -1,5 +1,23 @@
 # Verification history
 
+## 2026-11-23, later: the record editor's save, and four checks of the bulk import
+
+Measured the same day on a second local Symbiota 3.4.17 (commit 4491b791c, PHP 8.2, MariaDB 10.11) built from the harness in [harness/](harness/). Invented data only, and nothing real was touched: 300 records in one Live Data collection, 20 in another, 9 probe records with deliberate gaps, and users with each role. Each trial started from a restored dump, and every table was compared by primary key afterwards.
+
+| What was run | Where it is used |
+|---|---|
+| The record editor's save posted by a program: the smallest request that works, the whole form re-sent, a field listed and not posted, posted and not listed, an empty list, the response texts, a record that does not exist | [writing](references/writing.md#the-record-editors-save-driven-by-a-program) |
+| 221 saves of 13 text fields with 17 values each, the number, date and coordinate fields, and twenty fields in one save | [writing](references/writing.md#traps) |
+| Locks (a person with the record open), record security 1 and a sensitive taxon, the roles (collection administrator, collection editor, taxon editor, no role, the `publicEdits` flag), 300 saves for speed | [writing](references/writing.md#locks), [roles](references/writing.md#roles-and-review) |
+| The editor's batch update on 10 records, and adding an identification | [writing](references/writing.md#the-editors-batch-update) |
+| Four checks of a one-record import: whether other records change, whether the matched record loses columns the download lacks, what "Version data changes" logs, and whether the edit feed leaves out security 1 records | [hazards](references/hazards.md#an-import-of-one-record-changes-other-records-and-the-matched-one), [reading](references/reading.md#the-edit-feed) |
+
+What changed in the skill: a full section on the editor's save in `writing.md`; the new section on the one-record import in `hazards.md`; what the edit feed holds and leaves out in `reading.md`; the editor's save as the first route for changing one field in `decisions.md`; the tests moved out of `not-tested.md` and the new gaps added; `SKILL.md` rule 1 and the gotchas made to agree.
+
+**The harness was fixed.** The first harness lacked the `pdo_mysql` extension and the API's `api/.env` settings, so the API's routes failed. The Dockerfile and `setup.sh` now add both ([local-test](references/local-test.md#reaching-the-api-locally)). That session made the same changes by hand. The changed harness was not run end to end.
+
+**Disagreement with the earlier notes, and which the skill follows.** The notes of 2026-11-20 listed "driving the editor in bulk" and "whether an import appears in the edit feed" as untested. Both are now measured, and the skill follows the measurements. The earlier statement that no route protects a matched record except the skeletal one is true of the uploads only: the editor's save does.
+
 ## 2026-11-23: first version, and what was checked for it
 
 Written from Beeline's research notes and the Symbiota source, then checked against the public parts of ecdysis.org and against a fresh local Symbiota. Beeline's tests (2026-11-20 to 2026-11-23) were run by earlier sessions and are carried in as measurements with their dates. The sections below say which is which.

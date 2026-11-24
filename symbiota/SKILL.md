@@ -1,11 +1,11 @@
 ---
 name: symbiota
-description: Work with a Symbiota collections portal, such as Ecdysis (ecdysis.org) or SEINet. Use before reading records from one (the public v2 API, the signed-in download, a published Darwin Core archive, the edit feed), before preparing or running any upload to one (DwC-Archive Import, spreadsheet or skeletal upload, Extended Data Import for associations, the API), when deciding how occurrenceID, catalog number or the GUID source setting behave, when identifications or host-plant associations must survive an upload, or when testing an import on a local Symbiota first.
+description: Work with a Symbiota collections portal, such as Ecdysis (ecdysis.org) or SEINet. Use before reading records from one (the public v2 API, the signed-in download, a published Darwin Core archive, the edit feed), before preparing or running any upload to one (DwC-Archive Import, spreadsheet or skeletal upload, Extended Data Import for associations, the API), before changing existing records through the record editor's save, when deciding how occurrenceID, catalog number or the GUID source setting behave, when identifications or host-plant associations must survive an upload, or when testing an import on a local Symbiota first.
 ---
 
 # Symbiota portals
 
-Symbiota is open-source PHP and MySQL software that runs specimen collection portals. Each portal is its own installation with its own version, collections and settings. A record that an upload matches is rewritten whole, and nothing in the portal compares what it holds with what you send, so most mistakes are made on the way in and cannot be undone from outside.
+Symbiota is open-source PHP and MySQL software that runs specimen collection portals. Each portal is its own installation with its own version, collections and settings. A record that an upload matches is rewritten whole, and nothing in the portal compares what it holds with what you send, so most mistakes are made on the way in and cannot be undone from outside. The one route that changes a named field and leaves the rest alone is the record editor's save ([writing](references/writing.md#the-record-editors-save-driven-by-a-program)).
 
 Ecdysis (https://ecdysis.org, entomological collections) is the one portal this skill has been measured against. Everything specific to it, including its collections and its hosting, is in [references/ecdysis.md](references/ecdysis.md). Everything else here is about Symbiota in general.
 
@@ -36,7 +36,7 @@ Source: https://github.com/Symbiota/Symbiota. A portal publishes its API descrip
 
 ## Rules to follow first
 
-1. **Treat every upload that can match an existing record as destructive.** A matched record takes every column of the file. A column the file lacks, or leaves blank, becomes empty. The portal's own pages and the API offer no setting that protects a matched record except the skeletal route, which only fills empty fields ([hazards](references/hazards.md#absent-and-blank-columns-are-emptied)).
+1. **Treat every upload that can match an existing record as destructive.** A matched record takes every column of the file. A column the file lacks, or leaves blank, becomes empty. No upload setting protects a matched record except the skeletal route, which only fills empty fields ([hazards](references/hazards.md#absent-and-blank-columns-are-emptied)). To change a field on an existing record, post the record editor's save instead ([decisions](references/decisions.md#i-want-to-change-one-field-on-existing-records)). An import of even one record also changes other records ([hazards](references/hazards.md#an-import-of-one-record-changes-other-records-and-the-matched-one)).
 2. **Upload only records that are new to the portal**, with "Match on Catalog Number" ticked, so that a file of new catalog numbers changes nothing else. Prove the newness from a fresh read of the portal just before you build the file ([decisions](references/decisions.md#i-want-to-add-new-records)).
 3. **Stop at the pending transfer report.** Nothing is written until you press the transfer button. The report says how many records will be updated and how many are new, and cannot say which ones. When you mean to add new records only, a count of updated records other than zero means stop ([writing](references/writing.md#before-the-transfer)).
 4. **Read the portal before you write to it, and keep the read.** You need the catalog numbers it holds, its version, and the management type of the collection (`GET <portal>/api/v2/collection/<collid>`, field `managementType`).
@@ -69,11 +69,14 @@ One line each. Entries marked **→** have the evidence in a reference file.
 9. **The v2 API answers 500 to `dateLastModifiedMin` without `dateLastModifiedMax`.** Pair them. → [reading](references/reading.md#counting-and-asking-what-changed)
 10. **The archive import builds no associations.** Host plants and links go through the separate "Extended Data Import" page, whose relationship list is fixed. → [writing](references/writing.md#extended-data-import-for-associations)
 11. **A range in `eventDate` loses its end date.** Send the end in a column named `eventDate2`. → [hazards](references/hazards.md#smaller-hazards)
-12. **A leading double quote in `associatedTaxa`, tabs, backslashes, a zero count and a year-only date do not survive an upload unchanged.** → [hazards](references/hazards.md#smaller-hazards)
+12. **A leading double quote in `associatedTaxa`, tabs, backslashes, a zero count and a year-only date do not survive an upload unchanged.** The editor's save keeps the quote. → [hazards](references/hazards.md#smaller-hazards)
 13. **A staged upload is replaced by the next upload to the collection, and the transfer writes whatever is staged at that moment,** not what the report page showed. One person at a time. → [writing](references/writing.md#before-the-transfer)
-14. **The API has no route to update or delete an occurrence.** Its write routes create records or fill empty fields. → [writing](references/writing.md#the-api)
+14. **The API has no route to update or delete an occurrence.** Its write routes create records or fill empty fields. Updating goes through the editor's save. → [writing](references/writing.md#the-api)
 15. **A scheduled import exits 0 when its fetch fails.** → [writing](references/writing.md#a-scheduled-fetch-from-a-url)
-16. **The edit feed is public and lists every edit, field by field.** Use it to tell whether a record changed since your read. → [reading](references/reading.md#the-edit-feed)
+16. **The edit feed is public and lists edits field by field, but not all of them.** It leaves out records with record security above 0, identifications, and uploads made without "Version data changes". Its `recordID` is null for editor edits. → [reading](references/reading.md#the-edit-feed)
+17. **The record editor's save, posted by a program, changes only the fields you send, but its success message is also printed for a record that does not exist.** Read the value back. Never send the whole form, and never list a field you do not send. → [writing](references/writing.md#the-record-editors-save-driven-by-a-program)
+18. **The editor's save ignores locks.** A person who has the record open later overwrites the program's change with their whole-form save. → [writing](references/writing.md#locks)
+19. **An import of one record changed 15 others** (record security set on a sensitive taxon, columns filled in other collections, statistics recomputed), and "Version data changes" did not log them. → [hazards](references/hazards.md#an-import-of-one-record-changes-other-records-and-the-matched-one)
 
 ## Sources
 

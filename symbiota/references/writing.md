@@ -14,7 +14,7 @@ Open this before preparing or running an upload, or when choosing between the ro
 | Skeletal upload | "Skeletal File Import" (type 7) | the identifier chosen on the page | only empty fields are filled | see [below](#skeletal-upload) |
 | Restore from backup | `restorebackup.php` (type 10) | not examined in detail | see [below](#restore-from-backup) | rows were added |
 | Extended Data Import | "Extended Data Importer" (`importextended.php`) | catalog number, `occurrenceID`, `occid` or other catalog numbers | adds or updates association rows only | none |
-| The record editor | `collections/editor/occurrenceeditor.php` | one record at a time | the editor's own rules | clears the old current flag |
+| The record editor, posted by a program | `collections/editor/occurrenceeditor.php` | `occid`, one record per request | only the posted fields, each logged ([below](#the-record-editors-save-driven-by-a-program)) | adding one clears the old current flag and writes no edit row |
 | The API | `api/v2/occurrence` and others | none for create. The skeletal route takes a chosen identifier. | create, or fill empty fields. No update or delete of an occurrence. | none |
 
 The pages are reached from the collection's management menu. The pages in order for an upload route: `specuploadmanagement.php` (profiles), `specuploadmap.php` ("Analyze File" and the field mapping), `specuploadprocessor.php` ("Start Upload", then the "Pending Data Transfer Report" and its "Transfer Records to Central Specimen Table" button).
@@ -124,9 +124,84 @@ The archive import builds no associations. The `associatedOccurrence:*` columns 
 
 **What the export then shows.** `resourceRelationships.tab` in the `dwc` schema is comma-separated with: `coreid`, `resourceRelationshipID`, `resourceID`, `relationshipOfResourceID`, `relatedResourceID`, `relationshipOfResource`, `relationshipAccordingTo`, `relationshipEstablishedDate`, `relationshipRemarks`, `scientificName`, `references`, `basisOfRecord`, `dynamicProperties`. `relatedResourceID` is the `objectID`, or the `resourceUrl` when there is no `objectID`. `scientificName` is `verbatimSciname`. `relationshipOfResourceID` is the chosen relationship's `relationshipID` (source `DwcArchiverResourceRelationship.php` 31 to 46; measured 2026-11-20). So an observation's address shows in the export only if the row had no `objectID`. A published archive (observed 2026-11-23) held `hasHost` on every row of its `resourceRelationships.csv`.
 
-## The record editor
+## The record editor's save, driven by a program
 
-`collections/editor/occurrenceeditor.php` adds and edits one record at a time. Known from the tests, which used it only to make records: adding a determination through it clears the old current flag (`OccurrenceEditorDeterminations.php` 133 to 140), and it is the only place that does. Driving the editor to change an existing record in bulk was not tested ([not-tested](not-tested.md)).
+The one route that changes a named field of an existing record and nothing else. Measured on 2026-11-23 on a local Symbiota 3.4.17 with 300 invented records, one request per change and every table compared by primary key before and after. The page that a person uses is `collections/editor/occurrenceeditor.php`. A program can post to it the same request the page's Save button posts. Source for the request: `occurrenceeditor.php` 164 and `OccurrenceEditorManager.php` 896 to 1075 (`editOccurrence`); the page's script `js/symb/collections.editor.main.js` fills the hidden field `editedfields`.
+
+### The recipe
+
+1. Sign in as for the download: `POST <portal>/profile/index.php` with `login`, `password`, `action=login`, and keep the session cookie ([reading](reading.md#the-signed-in-download)). There is no CSRF token and no lock token. A signed-out request is answered 302 to the sign-in page. A session lasts an hour (source, `config/symbbase.php` 12).
+2. `POST <portal>/collections/editor/occurrenceeditor.php`, form-encoded, with exactly these fields: `occid` (the record), `collid` (the id of the collection that holds the record), `editedfields` (the names of the fields you send, each followed by a semicolon: `locality;`), `submitaction=saveOccurEdits`, and each field to change under its **lowercase** name (`locality=...`, `eventdate=...`). The fields are the columns of the records table. A request with these four plus one field changed that field and `dateLastModified` on that record and nothing else (measured).
+3. Read the value back ([next section](#how-to-tell-that-a-save-happened)).
+
+### How to tell that a save happened
+
+The answer is always HTTP 200 and an editor page of about 120 KB, whatever happened. The message in it is not proof:
+- `SUCCESS: edits submitted and activated` means the edit was applied. It is **also printed for an `occid` that does not exist**, which changes and logs nothing (measured with occid 99999). A missing `occid` prints no message.
+- `Edits submitted, but not activated...` means the edit was held for review: the record is unchanged ([roles](#roles-and-review)).
+- `ERROR: edits empty for occid #N` means `editedfields` was empty. Nothing changed.
+- `ERROR: Sorry, you are not authorized to edit occurrences within this collection...` means the user has no right to edit there.
+
+**Read the value back.** The response page is drawn from the database after the update, so its `occid` input names the record and its input for the field holds the stored value. Compare that with what you meant to store. Or read the record through the public API (`occurrence/<occid>`) afterwards. A record that another person has open shows "Record Locked!" and no form ([locks](#locks)), so a program that must read the form cannot rely on the response page for such a record.
+
+### What a save writes
+
+Measured on one field of one record, signed in as a collection administrator:
+- The record's column, and `dateLastModified` (the database stamps it).
+- One row in `omoccuredits` for each field that changed and was listed: `fieldName` as posted (lowercase), old and new value, `reviewStatus` 1, `appliedStatus` 1, `editType` 0, and the `uid` of the signed-in user. It shows in the public edit feed at once, with `recordID` null ([reading](reading.md#the-edit-feed)).
+- A row in `omoccureditlocks` for the program's user and that record ([locks](#locks)), and `lastLoginDate` of the user.
+- Nothing else: not the other records, not the identifications, associations, `sciname`, `tidInterpreted`, `family`, `recordSecurity`, `securityReason`, `processingStatus`, `observerUid`, or the collection's statistics. Twenty fields in one save wrote 20 edit rows and changed those 20 columns, three date-derived columns, `dateLastModified` and the coordinate point (below), and no other table.
+- A change of `associatedTaxa` does not touch the association rows, and a change of `country` or `stateProvince` does not touch `countryCode` or `continent`.
+- A change of `decimalLatitude` or `decimalLongitude` rewrites the record's row in `omoccurpoints` (a database trigger). The georeferencing columns, datum and uncertainty do not move.
+
+A change is logged only if PHP's loose `!=` finds the old and the new value different (source, line 1021). `45.5` against a stored `45.500000` is not logged, though the value is written.
+
+### Traps
+
+- **Never send the whole form.** Re-sending every field that the page shows, with one changed and only that one listed, also wrote `occurrenceID` (empty became the record's `recordID`, because the page shows that value in the box) and `scientificNameAuthorship` (empty became null), with no edit row for either. The UPDATE sets every posted column that exists in the records table, except `observeruid` (source, line 1049). `editedfields` decides only what is logged. A whole form taken before another writer's change also puts back that writer's old value silently (measured on `habitat`).
+- **A field posted but not listed is written and not logged** (measured with `habitat`).
+- **A field listed but not posted is set to the string `0`** and logged (measured: `habitat` "meadow" became "0"; source, line 1015). List only what you send.
+- **Text longer than the column is cut silently** (the UPDATE ignores the error). The edit row still holds the full text, so the log shows more than the record keeps. Measured limits: `recordedBy` 255, `country` 64, `samplingProtocol` 100, `fieldNumber` and `recordNumber` 45, and 65,535 for `locality` and `associatedTaxa`. Compare the value read back.
+- **Whitespace is changed.** Leading and trailing spaces are trimmed, and any run of two or more white-space characters (spaces, tabs, newlines, a carriage return and newline) becomes one space (source, `OccurrenceEditorManager.php` 121). A single tab or single newline survives, a carriage return and newline pair does not.
+- **Emoji are stored as `????`** (the database is `utf8mb3`), in the record and in the edit row.
+- **An empty value is stored as null**, never as an empty string, and the edit row's new value is empty. To empty a field, post it empty and list it.
+- **Everything else is stored byte for byte**, measured on 13 text fields: plain text, a leading double quote (an upload strips it, the editor keeps it, so `"host":"Salvia apiana"` in `associatedTaxa` survives), inner quotes, backslashes, accents, typographic quotes, en dash and CJK. A value exactly as long as the column was stored whole. 221 saves, 141 exact, and the 80 that were not each fell under a rule above.
+- **Dates: send ISO `YYYY-MM-DD` and nothing else.** `eventDate` is a date column: `2025`, `2025-06`, `06/04/2025`, `abc` and `2025-02-30` were stored as `0000-00-00`. `2025-6-4` was stored as `2025-06-04` with `year`, `month` and `day` set to null. `2025-06-14 10:30` kept the date. Empty became null.
+- **`eventDate` alone leaves `eventDate2` stale.** The year, month, day and day-of-year columns are recomputed from `eventDate`, `endDayOfYear` is reset to the start day, and an existing `eventDate2` stays as it was. Send both, or neither. With both sent, `day` is null, `month` is null if the months differ, `year` and `month` are null if the years differ. `eventDate2` alone changes nothing else, so the day-of-year columns stay stale. `verbatimEventDate` is separate text.
+- **Numbers are coerced, not checked.** Coordinates are doubles (`45.500000` becomes 45.5, `abc` becomes 0, 100 and 12345678901 are accepted with no range check, empty becomes null). `coordinateUncertaintyInMeters` is an unsigned integer (45.5 becomes 46, -5 becomes 0, `abc` becomes 0). Elevations are integers (45.5 becomes 46, `abc` becomes 0, empty becomes null). Check the range yourself before you send.
+- **`editedfields` listing only an unknown name** prints SUCCESS and logs nothing, yet the posted columns are still written (measured).
+
+### Locks
+
+Opening a record in the editor inserts a lock row for that person, valid for 900 seconds, and a person holds one lock at a time (source, `getLock`, `OccurrenceEditorManager.php` 2607). Measured on 2026-11-23:
+- **The save does not look at locks.** While a collection editor had a record open, the program's save succeeded.
+- **A person who has the record open later overwrites the program's change.** Their whole-form save wrote the old value of the field the program had changed, silently, and logged only the field they edited. The program cannot tell, and neither can they. The edit feed shows the person's edit, not the lost one.
+- **Every program save leaves a lock** for the program's user on that record for up to 15 minutes. A person who opens the record in that time sees "Record Locked!" and no form. The lock is deleted when the program saves its next record.
+
+So an edit by program belongs where nobody is editing the same records: tell the people, and read each record back after a delay if it matters.
+
+### Roles and review
+
+- **The least role that saves and applies is collection editor** on the collection (the same result as collection administrator: applied at once, the user's `uid` recorded). A superuser works too. No role is refused with the "not authorized" message. There is no role narrower than a collection. Dataset roles are not read by the editor (source). A general-observation collection lets a user edit the records they entered (source, not run).
+- **A user with no role is refused unless the collection's `publicEdits` flag is 1**, and then the edit is logged with `appliedStatus` 0, the record is unchanged and the message says "not activated". Such edits show in the edit feed as not applied.
+- **Taxon editors are held.** A user who is a taxon editor without a collection role is limited by taxon: a record of a family they edit was held (`appliedStatus` 0), a record of another family was refused, and geography is not checked (source, a TODO near `OccurrenceEditorManager.php` 2723). The page then stopped with a PHP fatal error (`occurrenceeditor.php` 1578, `in_array` on null) after the edit was logged. Never applied.
+- **Record security is not touched.** A record with security 1 saved and applied, and its edit row was written. A record of a taxon that the thesaurus marks sensitive kept `recordSecurity` and `securityReason` unchanged, also when `stateProvince` was edited. The edit feed leaves out the first and includes the second ([reading](reading.md#the-edit-feed)).
+
+### Speed
+
+300 saves of one field, one session, one after another: 3.5 seconds in all, mean 12 ms, none slower than 18 ms, no slowdown across the run and the session stayed valid (measured locally, no network latency, one user). The editor code has no throttle (source, searched). A real portal is slower, and its owners can see the load: one request at a time, with a pause ([SKILL.md](../SKILL.md#rules-to-follow-first)).
+
+### The editor's batch update
+
+`collections/editor/occurrencetabledisplay.php`, the table view's "batch update" panel, changes one field on many records of one collection. The request carries `collid`, a query that selects records (for example `q_catalognumber=A,B,C`), `bufieldname`, `buoldvalue`, `bunewvalue` and `bumatch` (empty means the whole value, any value means any part). It writes one edit row per record (`editType` 1, applied, the user's `uid`) and runs `UPDATE omoccurrences SET <field> = <new> WHERE occid IN (...)`. Measured on 10 records with `country`: 10 records and 10 edit rows changed, and only `country` and `dateLastModified` moved, with no derived column, no lock and no other table. The values are escaped but **not trimmed or collapsed**, unlike the single-record save. The edits show in the edit feed. Read the records back afterwards as for the save.
+
+### Adding an identification
+
+`submitaction=submitDetermination` (with `occid`, `sciname`, `identifiedby`, `dateidentified`, `makecurrent=1`) adds an identification the way a person does. Measured on one record: **no `omoccuredits` row is written**, so the change is in neither the edit list nor the public edit feed. A new current row is added in `omoccurdeterminations` and the previous current row is set not current and kept. The record's `sciname`, `tidInterpreted` (from the thesaurus), `identifiedBy`, `dateIdentified` and `dateLastModified` change and `scientificNameAuthorship` goes from empty to null. `family` did not change, so a new name in another family leaves a stale family. Adding a determination through the editor clears the old current flag (`OccurrenceEditorDeterminations.php` 133 to 140), and no upload route does.
+
+### What was not tested
+
+See [not-tested](not-tested.md#the-record-editors-save).
 
 ## The API
 

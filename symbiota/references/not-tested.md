@@ -8,9 +8,8 @@ Open this before relying on silence. Nothing here is evidence that something is 
 - **MySQL.** Only MariaDB 10.11 was used. Matching and collations were read as the same, which is not the same as run.
 - **PHP other than 8.2.**
 - **Snapshot and Aggregate collections.** What an import does to them (matching on `dbpk`, replacing the collection) is read in the source and was never run. Every measurement used Live Data.
-- **A user with a role below collection administrator or the superuser.** The round trip used a user whose only role was collection administrator.
-- **The Laravel API's write routes** (`occurrence`, `occurrence/skeletal`, `media`, `taxonomy`, `collection`). Neither a token nor a call was made. How a user gets a token was not looked up. The behaviour listed in [writing.md](writing.md#the-api) is read from the source and the OpenAPI text.
-- **Driving the record editor to change existing records in bulk.** It was used only to create records and determinations.
+- **A role below collection editor in an import.** The round trip used a user whose only role was collection administrator, and the 2026-11-23 import checks used the superuser. The editor's save was measured with collection administrator, collection editor, taxon editor and no role ([writing](writing.md#roles-and-review)).
+- **The Laravel API's write routes** (`occurrence`, `occurrence/skeletal`, `media`, `taxonomy`, `collection`). Neither a token nor a call was made. Its read routes were run locally on 2026-11-23 ([reading](reading.md#the-edit-feed)). How a user gets a token was not looked up. The behaviour listed in [writing.md](writing.md#the-api) is read from the source and the OpenAPI text.
 - **The image import, material samples, and the identifier extension.** The identifier extension's rows (`identifiers.tab`) were not loaded by the importer: the table stayed empty (measured 2026-11-21).
 - **Adding a term to the relationship vocabulary table** (`ctcontrolvocabterm`) so that the associations page offers it.
 - **Whether Symbiota honours a `default` value in `meta.xml`.** A project wrote constants as real columns instead.
@@ -22,11 +21,20 @@ Open this before relying on silence. Nothing here is evidence that something is 
 - **Why "Restore from backup" added determination rows** to real records (190 on 2026-11-23).
 - **How many current identifications a spreadsheet upload rewrites.** 332 on 2026-11-20 against the counts in [writing](writing.md#spreadsheet-upload) for 2026-11-23.
 - **Whether an unchanged re-upload moves `dateLastModified`.** It varied between runs ([hazards](hazards.md#smaller-hazards)).
-- **What a collection administrator sees of records with record security 1.** Their sensitive fields are blanked for a reader without rare-species rights. Which of the two groups an administrator falls into for the download was not isolated.
+- **What a collection administrator sees of records with record security 1.** Their sensitive fields are blanked for a reader without rare-species rights. Which of the two groups an administrator falls into for the download was not isolated. In the editor, a collection administrator's form showed the locality and latitude of a security 1 record unblanked (measured 2026-11-23). Whether the editor form isolates those fields for other roles was not tested.
+
+## The record editor's save
+
+Measured on 2026-11-23 ([writing](writing.md#the-record-editors-save-driven-by-a-program)). Not tested:
+- Real Ecdysis, MySQL, another Symbiota version, PHP other than 8.2, a portal's own roles, load and latency over a network, and cookies that are sent only over HTTPS (the harness turns that off).
+- Snapshot and Aggregate collections, general-observation collections and the crowd-source mode of the editor. A dataset-scoped role (the editor does not read one), and the collection taxon editor's "explicit approval" path (every try ended in a held edit).
+- Records with record security 5, and cultivated records. The image, paleo, exsiccati and material-sample parts of the editor, and edits of identifiers.
+- Two program sessions at once. A value of megabytes in one field. `eventDate` on a server with another time zone.
+- The import with "Import Identification History" ticked, and the one-record import run as a collection administrator and not as the superuser (the edit rows carry the importing user's `uid`, which was the superuser's).
 
 ## Not looked up
 
-- **Whether an import appears in the public edit feed.** Probably, if the feed reads the same edit table as "Version data changes", which was not checked. The meaning of the feed's `source` parameter and of `reviewStatus` was not looked up.
+- **The meaning of the edit feed's `source` parameter and of `reviewStatus`.** Not looked up.
 - **Request limits.** The only limit seen was HTTP 429 with `Retry-After` from the taxonomy export after three fetches in one day (2026-11-16). The v2 API's own limits are unknown.
 - **GBIF's procedure when a collection's published identifiers change.** Beeline's notes say GBIF treats a changed identifier as a new record unless the publisher first sends a list of old and new, and that GBIF reads one Ecdysis collection weekly. This skill did not check either.
 - **How often a portal rebuilds a collection's published archive.** One archive was last modified on 2026-11-03 and was still the current file on 2026-11-23.

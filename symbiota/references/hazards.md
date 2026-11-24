@@ -61,11 +61,28 @@ The tempting method is to download a collection, change some cells, and upload t
 
 **The pre-transfer report cannot tell you.** It reads the same for an unchanged file and a file with changes (measured 2026-11-23).
 
+## An import of one record changes other records and the matched one
+
+The belief that an import writes only the records in the file is wrong. Measured 2026-11-23, with a file of one row (the portal's own downloaded row for one record, its locality changed), "Match on Catalog Number" ticked, identification history unticked, imported by the superuser into a collection of 300 records plus 9 probe records with deliberate gaps. Sixteen records changed, only one of them in the file.
+
+**Other records, in the collection imported into:**
+- **`recordSecurity` went from 0 to 1 on every record of a sensitive taxon** (the thesaurus marks the taxon, 8 records), and `securityReason` stayed empty on them. A record already at 1 stayed. A record of the same taxon in another collection did not change.
+- `tidInterpreted` and `family` were filled on a record whose name had no thesaurus id.
+- `recordID` was filled on a record that had none, and `continent` and `countryCode` on a record that lacked them. **These two fill steps are not limited to the collection imported into**: a record of another collection was filled too.
+- `scientificNameAuthorship` went from null to an empty string on the 7 probe records that had null.
+- `dateLastModified` moved on all 16.
+- **The collection's statistics were recomputed**: the record and georeferenced counts and the stored statistics text changed (the count rose by 7 here only because the probes had been inserted by SQL, not through the portal). Another collection's statistics did not change.
+- Not changed: other records' identifications and associations, the coordinate point table, the taxa.
+
+**The matched record**, besides its own columns being rewritten: `observerUid` went from 1 to null and `processingStatus` from "reviewed" to null (neither is in the download), `genus` and `specificEpithet` were filled, `verbatimEventDate` went from null to a value the file carried, and a leading double quote in `associatedTaxa` was lost.
+
+**What "Version data changes" logs.** Ticked, the import wrote 6 edit rows, all for the matched record, all with the importing user's `uid` and lowercase field names (`genus`, `specificepithet`, `verbatimeventdate`, `associatedtaxa`, `locality`, `modified`), and they show in the public edit feed. It did **not** log `observerUid` and `processingStatus` being emptied, nor any change to another record (`recordSecurity`, `tidInterpreted`, `recordID`, `continent` and the others). Unticked, no edit row was written at all (the table's checksum was identical). So the edit history cannot show what an import did to records outside the file, nor the emptied columns.
+
 ## Smaller hazards
 
 | Hazard | What happens | Standing |
 |---|---|---|
-| A leading double quote in `associatedTaxa` | Stripped by an upload. A project that writes `"host":"<plant>"` loses the opening quote. One project replaced quotes by a placeholder word before uploading and batch-edited them back ([ecdysis.md](ecdysis.md#the-washington-upload-files)). | measured 2026-11-23 |
+| A leading double quote in `associatedTaxa` | Stripped by an upload, but **kept by the record editor's save** ([writing](writing.md#traps)). A project that writes `"host":"<plant>"` loses the opening quote. One project replaced quotes by a placeholder word before uploading and batch-edited them back ([ecdysis.md](ecdysis.md#the-washington-upload-files)). | measured 2026-11-23 |
 | Backslashes | Double on each round trip | measured 2026-11-23 |
 | Tabs inside a value | Dropped | measured 2026-11-23 |
 | `individualCount` of 0 | Becomes empty | measured 2026-11-23 |
@@ -80,7 +97,7 @@ The tempting method is to download a collection, change some cells, and upload t
 | `dateEntered` against `dateLastModified` | `dateEntered` is written in the web server's time zone and `dateLastModified` in the database's. They differed by seven hours in the test because PHP's time zone setting was empty. | measured 2026-11-20; SUB 1022 uses PHP `date()` |
 | A name the thesaurus lacks | `tidInterpreted` ends empty | measured 2026-11-23 |
 | Cleanup steps | Write records that are not in the file: `continent` and `tidInterpreted` appeared on a record the file did not contain | measured 2026-11-23 |
-| An edit history | Field-level for occurrence columns only, and only with "Version data changes" ticked. Identification rewrites are never versioned. | measured 2026-11-20 |
+| An edit history | Field-level for occurrence columns only, and only with "Version data changes" ticked, and only for the matched record's changed fields ([above](#an-import-of-one-record-changes-other-records-and-the-matched-one)). Identification rewrites are never versioned. | measured 2026-11-20 and 2026-11-23 |
 | Staged upload | Replaced by the next upload to the collection. The transfer writes whatever is staged. Rows older than 3 days are purged. | [writing](writing.md#before-the-transfer) |
 | Same catalog number twice | See [identity](identity.md#duplicates) | measured 2026-11-20 |
 | An uploaded `occurrenceID` | Ignored unless the GUID source is `occurrenceId` | [identity](identity.md#what-the-guid-source-setting-decides) |

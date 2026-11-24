@@ -25,13 +25,22 @@ Open this when you know what you want to happen to records on a portal and need 
 
 ## I want to change one field on existing records
 
-**There is no built-in route that changes one field and leaves the rest alone.** In order of safety:
+**There is no upload route that changes one field and leaves the rest alone.** The record editor's own save does, and a program can post it. In order of safety:
 
-1. **A person in the record editor**, one record at a time. It is the only route built to touch one record. It clears the old current identification flag. Make the list of changes for the person (record link, field, old value, new value). Not tested: driving the editor in bulk.
-2. **A skeletal upload, if the field is empty now.** It fills only empty fields and cannot correct a filled one ([writing](writing.md#skeletal-upload)). It also rewrote identification rows in the 2026-11-23 test, so keep identifications out of the file and check the result. The API's `occurrence/skeletal` route is the same idea for a short list of fields ([writing](writing.md#the-api)) and was never run.
-3. **A round trip: download, change cells, upload by DwC-Archive Import.** Measured 2026-11-23: it changed exactly the cells that were edited on the records it could carry, and nothing else on the real records except an empty string for a null authorship and the modification time. It damages every column the download lacks and several formats ([hazards](hazards.md#a-round-trip-through-the-download)). Use it only if you can show on a copy that your portal's columns survive, and add the missing columns (the API has `processingStatus`) to the file yourself, which was not tested.
+1. **The record editor's save, driven by a program: one request per record and field.** Measured on 2026-11-23: a request with `occid`, `collid`, `editedfields`, `submitaction=saveOccurEdits` and the one field changed that field and the modification time on that record and nothing else (not other records, identifications, associations, record security or statistics). It writes an edit row with the signed-in user's `uid`, and the edit shows in the public edit feed. 300 saves took 3.5 seconds locally. The recipe, the proof of success and the traps are in [writing](writing.md#the-record-editors-save-driven-by-a-program). **Conditions:**
+   - **The account is a collection editor or administrator of the collection.** A user with no role is refused, and a taxon editor's edit is held and never applied.
+   - **Send only the fields you change, and list exactly those.** Never the whole form: it also wrote `occurrenceID` and the authorship, and put back stale values.
+   - **Prove each save by reading the value back.** The success message is printed even for a record that does not exist. Compare the stored value, since text over the column's length is cut and whitespace, emoji and dates are changed on the way in.
+   - **Send only ISO dates, and `eventDate2` with `eventDate`.**
+   - **No person has the record open, and nobody opens it before the program is done.** The save ignores locks, and a person's later whole-form save puts back the old value silently. Each save leaves the program's lock on the record for 15 minutes.
+   - **The record is not one whose edits you must confirm in the public feed:** the feed leaves out records with record security above 0 ([reading](reading.md#the-edit-feed)). Read those back directly.
+   - **The change is not an identification.** An identification added in the editor writes no edit row, and `family` stays stale.
+   - The editor's batch update does the same for one field across records selected by a query, with an edit row per record ([writing](writing.md#the-editors-batch-update)). Values go in untrimmed.
+2. **A person in the record editor**, one record at a time, when the program's conditions do not hold or the change needs judgment. Make the list of changes for the person (record link, field, old value, new value). A person's save posts the whole form, so two people, or a person and a program, on one record can overwrite each other.
+3. **A skeletal upload, if the field is empty now.** It fills only empty fields and cannot correct a filled one ([writing](writing.md#skeletal-upload)). It also rewrote identification rows in the 2026-11-23 test, so keep identifications out of the file and check the result. The API's `occurrence/skeletal` route is the same idea for a short list of fields ([writing](writing.md#the-api)) and was never run.
+4. **A round trip: download, change cells, upload by DwC-Archive Import.** Measured 2026-11-23: it changed exactly the cells that were edited on the records it could carry. It is the last resort, for these reasons: it empties every column the download lacks (`processingStatus`, `observerUid` and others), it strips a leading quote and changes several formats, it rewrites the modification time on every record, and an import of even one row changed other records (record security set on records of a sensitive taxon, columns filled in other collections, statistics recomputed) and left them out of its edit history ([hazards](hazards.md#an-import-of-one-record-changes-other-records-and-the-matched-one)). Use it only if you can show on a copy that your portal's columns survive.
 
-Whichever you use, drop every record edited since your read: list the edits since the read time from the edit feed and exclude those records ([reading](reading.md#the-edit-feed)).
+Whichever you use, drop every record edited since your read: list the edits since the read time from the edit feed and exclude those records, remembering the feed's blind spots ([reading](reading.md#the-edit-feed)).
 
 **Never use the spreadsheet route** for this: it rewrites the current identification.
 
@@ -53,11 +62,11 @@ Whichever you use, drop every record edited since your read: list the edits sinc
 
 **Route.** Two public calls, cheapest first ([reading](reading.md#counting-and-asking-what-changed)):
 1. The count of the collection, and the count modified since a day before your download, both with a far-future maximum. If both match your stored numbers, nothing moved, subject to the probe's blind spots.
-2. The edit feed from your read time (`fromDate`). It lists each edit with record, field, old and new value. Use it to exclude records from a file, and to see what changed and when. It does not say who made an edit.
+2. The edit feed from your read time (`fromDate`). It lists each edit with record, field, old and new value (for records with record security 0 only). Use it to exclude records from a file, and to see what changed and when. It does not say who made an edit.
 
 Download again when either moves. The probe cannot see a second edit inside its window, nor a deletion compensated by an insertion.
 
-**Caveats.** A rise in `dateLastModified` is not proof of a real change ([hazards](hazards.md#smaller-hazards)). **Untested:** whether an upload by import page appears in the edit feed.
+**Caveats.** A rise in `dateLastModified` is not proof of a real change ([hazards](hazards.md#smaller-hazards)). The feed leaves out records with record security above 0, identifications, and uploads made without "Version data changes" ([reading](reading.md#the-edit-feed)).
 
 ## I want to publish my own record identifier
 

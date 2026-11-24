@@ -18,6 +18,9 @@ p='config/dbconnection.php'; s=open(p).read()
 s=s.replace("'host' => 'localhost'","'host' => 'symtest-db'").replace("'username' => ''","'username' => 'symb'").replace("'password' => ''","'password' => 'symbpw'").replace("'database' => ''","'database' => 'symbdb'")
 open(p,'w').write(s)
 PY
+# The Laravel API reads its own settings from api/.env, which a checkout may lack or hold with empty values. Without it the API cannot reach the database.
+[ -e api/.env ] || cp api/.env.example api/.env
+sed -i "s#^DB_HOST=.*#DB_HOST=symtest-db#; s#^DB_PORT=.*#DB_PORT=3306#; s#^DB_DATABASE=.*#DB_DATABASE=symbdb#; s#^DB_USERNAME=.*#DB_USERNAME=symb#; s#^DB_PASSWORD=.*#DB_PASSWORD=symbpw#" api/.env
 cd "$W"
 docker compose -p symtest up -d --build 2>&1 | tail -3
 sleep 12

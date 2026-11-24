@@ -50,7 +50,13 @@ Use it to refuse to overwrite a record that someone edited after your download: 
 
 Observed 2026-11-23 on Ecdysis: `type=internal` held 34,260 edits for a collection of 9,452 records and 474,857 for a collection of 111,251. `type=external` was empty for both collections. The first results of the smaller collection were dated in September 2025, so the feed starts at the beginning: pass `fromDate`, or you page through everything. `fieldName` is recorded as the editor wrote it (`stateProvince` and `basisofrecord` both appeared).
 
-Not known: whether an upload through the import pages appears here. Locally, with "Version data changes" ticked on the upload page, each changed field of a matched record got an edit row, and with it unticked none did (measured 2026-11-20, source `SpecUploadBase.php` 1066 to 1105). The feed is probably built from the same edit table, which was not checked. Determination rewrites are never versioned (measured 2026-11-20).
+**What the feed holds and leaves out**, measured 2026-11-23 on a local Symbiota 3.4.17 and read from `OccurrenceAnnotationController.php` 115 to 116:
+- **`recordID` is null on an edit made in the record editor.** Match edits to records by `occid`, not by `recordID`.
+- **The feed lists only records whose record security is 0.** An edit to a record with security 1 was saved and applied, and its edit row exists, but it is not in the feed (0 results for it, while the same call listed an edit on a security 0 record). So the feed cannot confirm that a program's edit reached such a record, and a silence in the feed does not mean a record is unchanged. A sweep of 300 saves showed 290 in the feed, the ten missing being the security 1 records.
+- **An import's edits are in the feed, if "Version data changes" was ticked**: the 6 edit rows of a one-record import appeared, with lowercase field names, and an import with it unticked wrote none. An edit by the record editor's save appears within the same second. Held edits (`appliedStatus` 0) also appear.
+- **Never in the feed:** an identification added in the editor or by an upload (they write no edit row), and any change by an upload without "Version data changes". Nor is any change to a record other than the matched one ([hazards](hazards.md#an-import-of-one-record-changes-other-records-and-the-matched-one)). The feed is a lower bound on what changed.
+- **The per-record route `api/v2/occurrence/{id}/annotation` answered HTTP 500 locally for every id**, because the controller calls a function that does not exist (the error log names `getOccidFromOtherIds`). Use the collection route with `collid` and filter, or `fieldName`.
+- **Reaching the API locally.** In the local harness the Laravel API answered only under `/sym/api/index.php/v2/...`, and needed the `pdo_mysql` extension and database settings in `api/.env`, which the harness now sets ([local-test](local-test.md#reaching-the-api-locally)).
 
 ## The signed-in download
 
