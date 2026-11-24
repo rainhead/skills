@@ -25,6 +25,10 @@ def login():
         raise RuntimeError('login: the portal answered HTTP %d' % r.status_code)
     if not any(c.name == 'PHPSESSID' for c in S.cookies):
         raise RuntimeError('login: the portal set no session cookie')
+    # A cookie is not a sign-in. The profile page redirects a signed-out visitor to the sign-in page, so a plain 200 shows the session is signed in.
+    p = S.get(B + '/profile/viewprofile.php', allow_redirects=False)
+    if p.status_code != 200:
+        raise RuntimeError('login: a session cookie is not a sign-in (the profile page answered HTTP %d)' % p.status_code)
 
 def text(h):
     h = re.sub(r'<script.*?</script>', '', h, flags=re.S)
@@ -124,10 +128,10 @@ def upload(label, collid, zippath, importident=True, matchcat=True, matchotherca
     t2 = text(r2.text)
     ff = form_fields(r2.text, 'finaltransferform')
     out = '== START UPLOAD\n' + t2[t2.find('Upload Status'):]
-    if dry:
-        print(out[-1500:]); return out
     if ff is None:
         raise RuntimeError('no transfer form after Start Upload, so nothing was transferred. The page said: ' + out[-1500:])
+    if dry:
+        print(out[-1500:]); return out
     ff = [(k, v) for k, v in ff] + [('action', 'activateOccurrences')]
     r3 = post(B + '/collections/admin/specuploadprocessor.php', data=ff)
     open('%s/%s.3-final.html' % (LOGDIR, label), 'w').write(r3.text)

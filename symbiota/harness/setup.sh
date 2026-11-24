@@ -44,9 +44,9 @@ done
 have=$(docker exec "$P-db" mariadb -uroot -prootpw -N -B symbdb -e "select count(*) from information_schema.tables where table_schema='symbdb'") || die "cannot count the tables in the database"
 [ "$have" = 0 ] || die "the database already holds $have tables. Remove the old copy first: docker compose -p $P down -v"
 # Wait until the web service answers, up to 120 seconds.
-ready=0
-for i in $(seq 1 60); do
-  code=$(curl -s -o /dev/null -w '%{http_code}' "$B/index.php" 2>/dev/null) || code=000
+ready=0; code=000; deadline=$((SECONDS + 120))
+while [ "$SECONDS" -lt "$deadline" ]; do
+  code=$(curl -s --max-time 5 -o /dev/null -w '%{http_code}' "$B/index.php" 2>/dev/null) || code=000
   case "$code" in 200|302) ready=1; break;; esac
   sleep 2
 done

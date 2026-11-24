@@ -2,7 +2,7 @@
 
 Open this when a question about an upload, a download or a version is not answered here, or before any upload that is new to you. A local copy costs minutes. A wrong upload to a live portal cannot be undone from outside. Standing marks are defined in [SKILL.md](../SKILL.md#version-and-how-claims-are-marked).
 
-**What to do:** stand up a copy of the portal's version, put in records shaped like the real ones, run the upload through the real pages, and compare every row before and after. Stop at the pending transfer report for a dry run.
+**What to do:** stand up a copy of the portal's version, put in records shaped like the real ones, run the upload through the real pages, and compare every row before and after. Stop at the pending transfer report for a dry run, which changes no occurrence but does clear and reload the collection's staging tables.
 
 ## Stand it up
 
@@ -23,9 +23,9 @@ Symbiota's Laravel API needs two things the first version of the harness lacked:
 
 `harness/h.py` drives the same pages a person uses, with one signed-in session. Import it with `SYMTEST_DIR` set to the harness folder if it lives elsewhere, and `SYMTEST_URL` if the port differs.
 
-- `login()` signs in as the administrator, and raises unless the portal answered 200 or 302 and set a session cookie.
+- `login()` signs in as the administrator, and raises unless the portal answered 200 or 302, set a session cookie, and then served the profile page (a cookie alone is not a sign-in).
 - `make_zip(path, columns, rows, ...)` builds a small DwC-Archive with an optional identification extension.
-- `upload(label, collid, zip, importident=True, matchcat=True, matchothercat=False, versiondata=False, dry=False)` runs "Analyze File", "Start Upload" and the transfer. With `dry=True` it stops at the "Pending Data Transfer Report" and returns its text. It raises when the analyze step fails, when a non-dry upload reaches no transfer form, or when the transfer page does not end with "Upload Procedure Complete", and every request raises on an HTTP error, so a failure cannot pass for a quiet success.
+- `upload(label, collid, zip, importident=True, matchcat=True, matchothercat=False, versiondata=False, dry=False)` runs "Analyze File", "Start Upload" and the transfer. With `dry=True` it stops at the "Pending Data Transfer Report" and returns its text. It raises when the analyze step fails, when the upload, dry or not, reaches no transfer form (a lost session or a missing report), or when the transfer page does not end with "Upload Procedure Complete", and every request raises on an HTTP error, so a failure cannot pass for a quiet success.
 - `upload_csv(...)` does the same for the spreadsheet route, with `uploadtype=7` for skeletal.
 - `import_ext(label, collid, importType, path, associationType, relationship, replace=...)` runs the "Extended Data Importer" (`importType=1` is associations).
 - `editor_add(...)` and `editor_det(...)` create a record and a determination through the record editor, which is how a record "entered in Symbiota" is made.
@@ -38,7 +38,7 @@ h.login()
 h.make_zip('t.zip', ['id', 'catalogNumber', 'scientificName'], [['1', 'T_1', 'Bombus vosnesenskii']])
 h.upload('first', 1, 't.zip')                     # adds the record
 h.make_zip('t2.zip', ['id', 'catalogNumber'], [['1', 'T_1']])
-h.upload('second', 1, 't2.zip', dry=True)         # report: "Records to be updated: 1", writes nothing
+h.upload('second', 1, 't2.zip', dry=True)         # report: "Records to be updated: 1"; no occurrence changes, staging is reloaded
 ```
 
 A scheduled fetch is tested by creating a profile on `specuploadmanagement.php` (type "IPT/DwC-A Provider", path `http://symtest-files/<file>.zip`), saving its mapping, and running `php collections/admin/uploadhandler.php <collid> <uspid> 0 1 1 0` inside the `<prefix>-web` container (`symtest-web` by default) as `www-data` ([writing](writing.md#a-scheduled-fetch-from-a-url)).

@@ -1,5 +1,19 @@
 # Verification history
 
+## 2026-11-23, third round of review fixes
+
+Harness:
+- `hashes.sh` reads each row as one JSON array, so a NULL cannot hash the same as the text NULL, and it prints nothing until every read has succeeded.
+- `h.py` `upload(dry=True)` now raises when no transfer form is present, so a lost session cannot pass for a dry run. `setup.sh` gives the readiness `curl` a time limit and holds the wait to its 120 second deadline.
+- `login` in `lib.sh` and `h.py` also requests the profile page, which redirects a signed-out visitor, because a session cookie does not prove a sign-in.
+- Run end to end on 2026-11-23 with its own prefix and port: setup, an upload, a dry run and `hashes.sh` before and after, then removed.
+
+Prose:
+- A date range goes in one request with both `eventDate` and `eventDate2` (decisions, writing).
+- The skeletal update fills NULL, not empty strings (`IFNULL`). Identifications must differ as the database compares them, ignoring case and accents.
+- `observeruid` is left out of the copied columns, but the transfer's UPDATE sets it to NULL on every matched record unless the upload form posts one value for the whole file (source `SpecUploadBase.php` 987 to 993; measured 2026-11-23). The four statements now agree.
+- Stopping at the report changes no occurrence, but "Start Upload" clears and reloads the collection's shared staging tables, so it can replace another person's staged upload. The claim that it is harmless is corrected in SKILL.md, writing, decisions, local-test and below.
+
 ## 2026-11-23, second round of review fixes
 
 The first round's fixes were narrow, so this round fixed the class of mistake in each file and not only the cited line. Two classes, one for the harness and one for the prose.
@@ -82,7 +96,7 @@ The harness in [harness/](harness/), copied from the earlier sessions' scripts a
 | Test | Result |
 |---|---|
 | Archive of two new records through `upload()` | "Records to be updated: 0", "New records: 2", both inserted |
-| `upload(dry=True)` of a file for an existing catalog number | The report read "Records to be updated: 1 Caution: incoming records will replace existing records" and the record was unchanged afterwards (a dry run writes nothing) |
+| `upload(dry=True)` of a file for an existing catalog number | The report read "Records to be updated: 1 Caution: incoming records will replace existing records" and the record was unchanged afterwards (a dry run changes no occurrence, but it clears and reloads the collection's shared staging tables, so it can replace another person's staged upload) |
 | A file of only `id` and `catalogNumber` over a record that had a name and a locality | Both emptied (absent columns are emptied) |
 | The same with "Match on Catalog Number" unticked | The report warned "Records matching on catalog number that will be appended: 1" and "This will result in records with duplicate catalog numbers", then inserted 0. The row id equalled an existing record's `dbpk`, and the unique key on `(collid, dbpk)` stopped the insert. This is narrower than the notes' result of a second record, which had a new row id. |
 

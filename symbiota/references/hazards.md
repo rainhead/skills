@@ -6,7 +6,7 @@ Open this when an upload could meet a record that already exists, to see what it
 
 ## Absent and blank columns are emptied
 
-An upload writes every column that exists both in its staging table and in the records table, so a column the file does not stage is written as empty (source, `SpecUploadBase.php` 987, `o.field = u.field`). The columns excluded from that are `dbpk`, `observeruid`, `dateentered`, `initialtimestamp`, `occid` and `collid`.
+An upload writes every column that exists both in its staging table and in the records table, so a column the file does not stage is written as empty (source, `SpecUploadBase.php` 987, `o.field = u.field`). The columns excluded from that are `dbpk`, `observeruid`, `dateentered`, `initialtimestamp`, `occid` and `collid`. Excluded from the copy does not mean untouched: for `observeruid` the transfer's UPDATE sets it to NULL on every matched record, unless the upload form posts one value for the whole file (source, `SpecUploadBase.php` 987 to 993).
 
 - **Measured 2026-11-20, archive route.** A file holding only an id and a catalog number, uploaded over a fully filled record, emptied: `otherCatalogNumbers`, `sciname`, authorship, `identifiedBy`, `dateIdentified`, `recordedBy`, `recordNumber`, `associatedCollectors`, every date part, `habitat`, remarks, `associatedTaxa`, `reproductiveCondition`, `establishmentMeans`, `lifeStage`, `sex`, `individualCount`, `preparations`, `country`, `stateProvince`, `county`, `locality`, coordinates, `disposition`, `language` and `processingStatus`. Kept: `catalogNumber`, `occurrenceID`, `recordID`, `basisOfRecord`, `dateEntered`.
 - **Blank cells empty exactly like absent columns**, and the two cannot be told apart (measured 2026-11-20, archive and spreadsheet).
@@ -53,7 +53,7 @@ The tempting method is to download a collection, change some cells, and upload t
 | The collection menu's "Data Exporter" CSV and the administrator backup CSV, as a general file | As the search-page CSV | |
 | The administrator backup ZIP through "Restore from backup" | `occurrenceID` written on all 9,452. 190 determination rows added to real records. | 5 added |
 
-**The columns a download lacks are emptied on every record that is re-uploaded**: `processingStatus`, `observerUid`, `storageLocation`, `labelProject`, `duplicateQuantity`, `dynamicProperties`, `fieldNotes`, `samplingEffort`, `organismID`, `parentLocationID`, `footprintWKT`, `georeferencedDate`, `previousIdentifications` and others. `institutionCode` and `collectionCode` are unmapped on import.
+**The columns a download lacks are emptied on every record that is re-uploaded** (`observerUid` by the transfer's own UPDATE, the rest by the copy of staged columns): `processingStatus`, `observerUid`, `storageLocation`, `labelProject`, `duplicateQuantity`, `dynamicProperties`, `fieldNotes`, `samplingEffort`, `organismID`, `parentLocationID`, `footprintWKT`, `georeferencedDate`, `previousIdentifications` and others. `institutionCode` and `collectionCode` are unmapped on import.
 
 **Real-collection check.** The API shows `processingStatus` filled on real records of one Ecdysis collection, and a leading double quote on `associatedTaxa` of one Ecdysis collection's filled records ([ecdysis.md](ecdysis.md#what-was-sampled-from-the-api-on-2026-11-23)). A round trip there would empty the first and strip the second.
 
@@ -88,7 +88,7 @@ The belief that an import writes only the records in the file is wrong, because 
 - **The collection's statistics were recomputed**: the record and georeferenced counts and the stored statistics text changed (the count rose by 7 here only because the probes had been inserted by SQL, not through the portal). Another collection's statistics did not change.
 - Not changed: other records' identifications and associations, the coordinate point table, the taxa.
 
-**The matched record**, besides its own columns being rewritten: `observerUid` went from 1 to null and `processingStatus` from "reviewed" to null (neither is in the download), `genus` and `specificEpithet` were filled, `verbatimEventDate` went from null to a value the file carried, and a leading double quote in `associatedTaxa` was lost.
+**The matched record**, besides its own columns being rewritten: `observerUid` went from 1 to null (the transfer's UPDATE sets it to NULL on a matched record, see line 9) and `processingStatus` from "reviewed" to null (neither is in the download), `genus` and `specificEpithet` were filled, `verbatimEventDate` went from null to a value the file carried, and a leading double quote in `associatedTaxa` was lost.
 
 **What "Version data changes" logs.** Ticked, the import wrote 6 edit rows, all for the matched record, all with the importing user's `uid` and lowercase field names (`genus`, `specificepithet`, `verbatimeventdate`, `associatedtaxa`, `locality`, `modified`), and they show in the public edit feed. It did **not** log `observerUid` and `processingStatus` being emptied, nor any change to another record (`recordSecurity`, `tidInterpreted`, `recordID`, `continent` and the others). Unticked, no edit row was written at all (the table's checksum was identical). So the edit history cannot show what an import did to records outside the file, nor the emptied columns.
 
